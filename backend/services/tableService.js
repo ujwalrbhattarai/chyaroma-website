@@ -1,12 +1,10 @@
-import jwt from 'jsonwebtoken'
+import { randomUUID } from 'node:crypto'
 import QRCode from 'qrcode'
 import * as tableRepository from '../repositories/tableRepository.js'
 import * as orderRepository from '../repositories/orderRepository.js'
 import * as billRepository from '../repositories/billRepository.js'
 
 const tableError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
-const tokenSecret = process.env.QR_TABLE_SECRET ?? process.env.JWT_ACCESS_SECRET
-
 export function assertTableAccess(user) {
   if (!user || !['super_admin', 'branch_manager'].includes(user.role)) throw tableError('Forbidden', 403)
 }
@@ -19,21 +17,18 @@ function resolveBranchId(user, requestedBranchId) {
   return user.role === 'super_admin' ? requestedBranchId : user.branchId
 }
 
-function signTableToken({ branchId, tableId, tableNumber }) {
-  if (!tokenSecret) throw tableError('QR_TABLE_SECRET or JWT_ACCESS_SECRET is required', 500)
-  return jwt.sign({ type: 'table', branchId, tableId, tableNumber }, tokenSecret, { expiresIn: '5y' })
-}
-
 function buildMenuUrl(token) {
   const origin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173'
-  return `${origin}/table/menu?token=${encodeURIComponent(token)}`
+  // The root path is always available on a static site, so scans do not depend
+  // on a server-side deep-link rule to reach the customer menu.
+  const url = new URL(origin)
+  url.pathname = '/'
+  url.search = ''
+  url.searchParams.set('token', token)
+  return url.toString()
 }
 
-export function createTableService({ repository = tableRepository, orders = orderRepository, bills = billRepository, secret = tokenSecret } = {}) {
-  function signToken({ branchId, tableId, tableNumber }) {
-    if (!secret) throw tableError('QR_TABLE_SECRET or JWT_ACCESS_SECRET is required', 500)
-    return jwt.sign({ type: 'table', branchId, tableId, tableNumber }, secret, { expiresIn: '5y' })
-  }
+export function createTableService({ repository = tableRepository, orders = orderRepository, bills = billRepository } = {}) {
   return {
     async listTables(user, requestedBranchId) {
       assertTableReadAccess(user)
@@ -50,9 +45,11 @@ export function createTableService({ repository = tableRepository, orders = orde
       if (!Number.isInteger(tableNumber) || tableNumber < 1) throw tableError('tableNumber must be a positive integer')
       const existing = await repository.listTables(branchId)
       if (existing.some((t) => t.tableNumber === tableNumber)) throw tableError('Table number already exists in this branch')
-      const temporaryToken = signToken({ branchId, tableId: `pending-${branchId}-${tableNumber}`, tableNumber })
+      // UUIDs are opaque, high-entropy tokens and make much less dense QR codes
+      // than the previous long signed JWTs, improving phone-camera scan speed.
+      const temporaryToken = randomUUID()
       const pendingTable = await repository.createTable(branchId, { tableNumber, label, qrToken: temporaryToken })
-      const finalToken = signToken({ branchId, tableId: pendingTable.id, tableNumber })
+      const finalToken = randomUUID()
       return repository.updateTableToken(pendingTable.id, branchId, finalToken)
     },
     async deactivateTable(user, requestedBranchId, tableId) {
@@ -83,12 +80,10 @@ export function createTableService({ repository = tableRepository, orders = orde
     },
     async validateScanToken(token) {
       if (!token) throw tableError('Token is required')
-      if (!secret) throw tableError('QR_TABLE_SECRET or JWT_ACCESS_SECRET is required', 500)
-      let payload
-      try { payload = jwt.verify(token, secret) } catch { throw tableError('Invalid table token') }
-      if (payload.type !== 'table') throw tableError('Invalid table token')
-      const table = await repository.findTableById(payload.tableId, payload.branchId)
-      if (!table || !table.isActive || table.qrToken !== token) throw tableError('Invalid table token')
+      // The stored token is the source of truth. Existing JWT-backed table
+      // tokens continue to work while new compact UUID QR tokens are issued.
+      const table = await repository.findTableByToken(token)
+      if (!table || !table.isActive) throw tableError('Invalid table token')
       // Auto-occupy: scanning the QR marks this table occupied until the customer
       // pays the bill (or staff force-releases it).
       const updated = await repository.setCustomerOccupied(table.id, table.branchId, true)

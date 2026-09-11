@@ -2,8 +2,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { Client } from 'pg'
 
-const databaseName = process.env.CAFE_CENTRAL_DB_NAME ?? 'cafe_central'
-const databasePassword = process.env.POSTGRES_PASSWORD ?? 'admin123'
+import * as dotenv from 'dotenv'
+dotenv.config({ path: new URL('../.env.local', import.meta.url) })
+
 const migrationDir = path.resolve('..', 'database', 'migrations')
 const migrations = [
   '20260804_create_branches.sql',
@@ -32,22 +33,48 @@ const migrations = [
   '20260910_cashier_and_inventory_idempotency.sql',
 ]
 
-const adminClient = new Client({ connectionString: `postgresql://postgres:${databasePassword}@localhost:5432/postgres` })
-await adminClient.connect()
-const exists = await adminClient.query('SELECT 1 FROM pg_database WHERE datname = $1', [databaseName])
-if (exists.rowCount === 0) {
-  await adminClient.query(`CREATE DATABASE ${databaseName}`)
-  console.log(`Created database ${databaseName}`)
-} else {
-  console.log(`Database already exists ${databaseName}`)
-}
-await adminClient.end()
+const connectionString = process.env.DATABASE_URL_UNPOOLED
+if (!connectionString) throw new Error('DATABASE_URL_UNPOOLED is required for migrations')
 
-const appClient = new Client({ connectionString: `postgresql://postgres:${databasePassword}@localhost:5432/${databaseName}` })
+const appClient = new Client({ connectionString })
 await appClient.connect()
+
+await appClient.query(`
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    filename TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )
+`)
+
+const applied = new Set(
+  (await appClient.query('SELECT filename FROM schema_migrations')).rows.map(({ filename }) => filename)
+)
+
+// This project predates migration tracking. If its complete baseline schema is
+// already present, register it once instead of trying to replay ALTER TABLEs.
+const baselinePresent = await appClient.query(
+  "SELECT to_regclass('public.branches') IS NOT NULL AND to_regclass('public.users') IS NOT NULL AND to_regclass('public.orders') IS NOT NULL AS present"
+)
+if (applied.size === 0 && baselinePresent.rows[0].present) {
+  for (const migration of migrations) {
+    await appClient.query('INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [migration])
+    applied.add(migration)
+  }
+  console.log('Registered existing baseline migrations')
+}
+
 for (const migration of migrations) {
+  if (applied.has(migration)) continue
   const sql = await fs.readFile(path.join(migrationDir, migration), 'utf8')
-  await appClient.query(sql)
+  await appClient.query('BEGIN')
+  try {
+    await appClient.query(sql)
+    await appClient.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [migration])
+    await appClient.query('COMMIT')
+  } catch (error) {
+    await appClient.query('ROLLBACK')
+    throw error
+  }
   console.log(`Applied ${migration}`)
 }
 await appClient.end()

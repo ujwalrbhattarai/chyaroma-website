@@ -1,4 +1,5 @@
 node_modules/
+.neon-auth/
 .env
 .env.*
 .vite/
@@ -10,3 +11,4 @@ __pycache__/
 *.log
 .DS_Store
 uploads/
+.neon

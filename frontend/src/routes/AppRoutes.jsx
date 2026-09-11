@@ -59,10 +59,10 @@ const routes = {
 export default function AppRoutes({ path, navigate, session, setSession, loadingSession }) {
   const [pathname, query = ''] = path.split('?')
   const hasTableToken = new URLSearchParams(query).has('token')
-  // Static hosts commonly serve the SPA fallback as /index.html. If a QR scan
-  // reaches that fallback with its table token preserved, open the customer
-  // menu rather than treating /index.html as an unknown path and showing home.
-  const route = (pathname === '/index.html' && hasTableToken ? routes['/table/menu'] : routes[pathname]) ?? routes['/']
+  // New QR links use the reliable site root. /index.html is still supported
+  // for QR codes issued before this change or static-host fallback behavior.
+  const isTableMenuEntry = hasTableToken && (pathname === '/' || pathname === '/index.html')
+  const route = (isTableMenuEntry ? routes['/table/menu'] : routes[pathname]) ?? routes['/']
   const isUnauthorized = Boolean(route.roles && (!session || !route.roles.includes(session.role)))
 
   useEffect(() => {

@@ -4,7 +4,9 @@ import BrandingProvider from './context/BrandingContext'
 import { getSession } from './services/authService'
 
 export default function App() {
-  const [path, setPath] = useState(window.location.pathname)
+  // Include the query string so QR-scan links like "/?token=<uuid>" keep the
+  // table token available to AppRoutes (which routes "/?token=" to the menu).
+  const [path, setPath] = useState(() => window.location.pathname + window.location.search)
   const [session, setSession] = useState(null)
   const [loadingSession, setLoadingSession] = useState(true)
 
@@ -14,7 +16,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    const handlePopState = () => setPath(window.location.pathname)
+    const handlePopState = () => setPath(window.location.pathname + window.location.search)
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
