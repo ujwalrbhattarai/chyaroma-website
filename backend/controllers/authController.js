@@ -1,5 +1,8 @@
 import { authenticate, refreshSession, revokeSession } from '../services/authService.js'
-const production = process.env.NODE_ENV === 'production'
+// Render sets RENDER for deployed services. Treat it as production even when
+// NODE_ENV was not explicitly added in the dashboard, so cross-subdomain
+// cookies work consistently between www.chyaroma.com and api.chyaroma.com.
+const production = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER)
 const options = { httpOnly: true, secure: production, sameSite: production ? 'none' : 'lax', path: '/' }
 function sendSession(response, session) { return response.cookie('cc_access', session.accessToken, { ...options, maxAge: session.accessExpiresInMs }).cookie('cc_refresh', session.refreshToken, { ...options, maxAge: session.refreshExpiresInMs }).status(200).json({ user: session.user }) }
 export async function login(request, response, next) { try { sendSession(response, await authenticate(request.body)) } catch (error) { next(error) } }
