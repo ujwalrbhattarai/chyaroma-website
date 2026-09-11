@@ -243,3 +243,19 @@ test('requestPublicBill does not re-bill orders already included in a previous b
   assert.equal(bill.items.length, 1)
   assert.equal(bill.items[0].orderId, newOrderId)
 })
+
+test('requestPublicBill keeps returning an existing draft bill once all orders are already billed', async () => {
+  // Reproduces the live bug: a draft bill already captured this table's order (e.g. a
+  // prior bill-page visit or a staff preview), so syncDraftBill has no NEW unbilled orders.
+  // The customer must still get the existing draft (with items) so they can pay — never 404.
+  const table = { id: TABLE, branchId: BRANCH, qrToken: 'tok-1' }
+  const draft = { ...sampleBill, id: 'draft-1', status: 'draft', orderIds: ['ord-1'], createdAt: new Date().toISOString() }
+  const service = makeService({
+    orderList: [{ id: 'ord-1', branchId: BRANCH, tableId: TABLE, status: 'completed' }],
+    billList: [draft],
+    tables: { findTableByToken: async (token) => token === 'tok-1' ? table : null },
+  })
+  const bill = await service.requestPublicBill('tok-1')
+  assert.equal(bill.id, 'draft-1')
+  assert.ok(bill.items.length > 0)
+})

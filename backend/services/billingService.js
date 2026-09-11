@@ -41,7 +41,19 @@ export function createBillingService({ bills = billRepository, orders = orderRep
     async syncDraftBill(branchId, tableId) {
       const billedOrderIds = new Set(await bills.listBilledOrderIdsByTable(branchId, tableId))
       const tableOrders = (await orders.listOrdersReadyForBilling(branchId, tableId)).filter((order) => !billedOrderIds.has(order.id))
-      if (tableOrders.length === 0) return null
+      const existingDraft = await bills.findDraftBillByTable(branchId, tableId)
+      if (tableOrders.length === 0) {
+        // A draft bill already captured this table's orders (from a prior bill-page visit
+        // or a staff preview). Return it (with items) so the customer can still see and pay
+        // it — otherwise they hit "No active orders" and leave unpaid. If there is no draft
+        // either, there is genuinely nothing to bill yet.
+        if (existingDraft) {
+          const draftItems = []
+          for (const orderId of existingDraft.orderIds ?? []) draftItems.push(...await orderItems.listOrderItems(orderId, branchId))
+          return { ...existingDraft, items: draftItems }
+        }
+        return null
+      }
       const billableItems = []
       for (const order of tableOrders) billableItems.push(...await orderItems.listOrderItems(order.id, branchId))
       const subtotal = Number(billableItems.reduce((sum, item) => sum + Number(item.unitPrice) * Number(item.quantity), 0).toFixed(2))
@@ -50,7 +62,6 @@ export function createBillingService({ bills = billRepository, orders = orderRep
       const taxAmount = calculateTax(subtotal, taxRate)
       const discountAmount = 0
       const totalAmount = Number((subtotal + taxAmount - discountAmount).toFixed(2))
-      const existingDraft = await bills.findDraftBillByTable(branchId, tableId)
       const payload = {
         branchId,
         tableId,
