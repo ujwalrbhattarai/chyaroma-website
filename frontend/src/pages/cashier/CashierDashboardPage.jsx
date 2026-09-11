@@ -3,6 +3,7 @@ import { io } from 'socket.io-client'
 import PageShell from '../../components/shared/PageShell'
 import { completeCashPayment, getTableBill, listBranchBills } from '../../services/billingService'
 import TableTransferPanel from '../../components/staff/TableTransferPanel'
+import TableBillBoard from '../../components/staff/TableBillBoard'
 
 function playNotificationChime() {
   try {
@@ -414,6 +415,7 @@ export default function CashierDashboardPage({ navigate, session, setSession }) 
 
           {/* Right Column: Pending Checkout Requests Queue */}
           <div className="space-y-6">
+            <TableBillBoard branchId={branchId} />
             <TableTransferPanel branchId={branchId} />
 
             <section className="neo-card rounded-2xl p-6">
