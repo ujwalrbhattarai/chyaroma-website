@@ -98,3 +98,30 @@ test('getTableStatus returns all non-cancelled orders including completed ones',
   assert.equal(result.orders.find((o) => o.status === 'completed').id, 'ord-1')
   assert.equal(result.orders.find((o) => o.status === 'pending').id, 'ord-2')
 })
+
+const invalidQuantityCases = [
+  ['zero', [{ itemId: 'item-1', quantity: 0 }]],
+  ['negative', [{ itemId: 'item-1', quantity: -100 }]],
+  ['fractional', [{ itemId: 'item-1', quantity: 1.5 }]],
+  ['oversized', [{ itemId: 'item-1', quantity: 1000 }]],
+  ['missing itemId', [{ quantity: 1 }]],
+  ['missing quantity', [{ itemId: 'item-1' }]],
+]
+
+for (const [label, items] of invalidQuantityCases) {
+  test(`placeOrder rejects ${label} quantity to prevent bill fraud`, async () => {
+    const service = makeService()
+    await assert.rejects(
+      async () => service.placeOrder({ branchId: 'branch-1', tableToken: 'tok-1', items }),
+      /quantity|itemId/i,
+    )
+  })
+}
+
+test('placeOrder rejects a tampered payload before creating any order row', async () => {
+  const service = makeService()
+  await assert.rejects(
+    async () => service.placeOrder({ branchId: 'branch-1', tableToken: 'tok-1', items: [{ itemId: 'item-1', quantity: -1 }] }),
+    /quantity/i,
+  )
+})

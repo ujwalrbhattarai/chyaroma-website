@@ -48,6 +48,7 @@ export function createBillingService({ bills = billRepository, orders = orderRep
         // it — otherwise they hit "No active orders" and leave unpaid. If there is no draft
         // either, there is genuinely nothing to bill yet.
         if (existingDraft) {
+          if (Number(existingDraft.totalAmount) < 0) throw billingError('Invalid bill amount', 409)
           const draftItems = []
           for (const orderId of existingDraft.orderIds ?? []) draftItems.push(...await orderItems.listOrderItems(orderId, branchId))
           return { ...existingDraft, items: draftItems }
@@ -57,6 +58,9 @@ export function createBillingService({ bills = billRepository, orders = orderRep
       const billableItems = []
       for (const order of tableOrders) billableItems.push(...await orderItems.listOrderItems(order.id, branchId))
       const subtotal = Number(billableItems.reduce((sum, item) => sum + Number(item.unitPrice) * Number(item.quantity), 0).toFixed(2))
+      // Defense in depth: never produce a negative/zero-total bill (a sign-drained or
+      // tampered order must fail closed rather than hand the cashier a loss).
+      if (subtotal < 0) throw billingError('Invalid bill amount', 400)
       const branchSettings = await settings.findSettingsByBranch(branchId)
       const taxRate = branchSettings?.taxRate ?? 0
       const taxAmount = calculateTax(subtotal, taxRate)

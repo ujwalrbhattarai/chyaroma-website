@@ -5,9 +5,33 @@ import * as tableRepository from '../repositories/tableRepository.js'
 
 const orderError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 
+const MAX_QUANTITY_PER_LINE = 99
+const MAX_LINE_ITEMS = 100
+const MAX_ORDER_QUANTITY = 500
+const MAX_NOTES_LENGTH = 500
+
 function normalizeOrderItems(items = []) {
   if (!Array.isArray(items) || items.length === 0) throw orderError('At least one item is required')
-  return items.map((item) => ({ itemId: item.itemId, quantity: Number(item.quantity), notes: item.notes ?? '' }))
+  if (items.length > MAX_LINE_ITEMS) throw orderError(`A single order cannot hold more than ${MAX_LINE_ITEMS} line items`)
+  const normalized = items.map((item) => {
+    const itemId = typeof item.itemId === 'string' ? item.itemId.trim() : item.itemId
+    const quantity = Number(item.quantity)
+    if (!itemId) throw orderError('Each order item requires an itemId')
+    // Server-authoritative guard: never accept zero, negative, fractional, or absurd
+    // quantities. A hostile payload like quantity: -100 previously produced a negative
+    // (or free) bill, which a scammer could use against the cashier.
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY_PER_LINE) {
+      throw orderError(`Quantity must be a whole number between 1 and ${MAX_QUANTITY_PER_LINE}`)
+    }
+    return {
+      itemId,
+      quantity,
+      notes: (item.notes ?? '').toString().slice(0, MAX_NOTES_LENGTH),
+    }
+  })
+  const totalQuantity = normalized.reduce((sum, entry) => sum + entry.quantity, 0)
+  if (totalQuantity > MAX_ORDER_QUANTITY) throw orderError(`An order cannot exceed ${MAX_ORDER_QUANTITY} items total`)
+  return normalized
 }
 
 export function createOrderService({ orders = orderRepository, orderItems = orderItemRepository, menus = menuRepository, tables = tableRepository } = {}) {
@@ -26,12 +50,18 @@ export function createOrderService({ orders = orderRepository, orderItems = orde
       const table = await tables.findTableByToken(tableToken)
       if (!table || !table.isActive || table.branchId !== branchId) throw orderError('Invalid table token', 403)
       const tableItems = normalizeOrderItems(items)
+      // Resolve every item against the menu BEFORE creating any order row, so an invalid
+      // or tampered payload cannot leave behind an orphaned/empty pending order to abuse.
+      const resolved = []
+      for (const entry of tableItems) {
+        const menuItem = await menus.findMenuItemById(entry.itemId, branchId)
+        if (!menuItem || !menuItem.isAvailable) throw orderError('Menu item unavailable', 400)
+        resolved.push({ entry, menuItem })
+      }
       const order = await orders.createOrder({ branchId, tableId: table.id, notes })
       const createdItems = []
-      for (const item of tableItems) {
-        const menuItem = await menus.findMenuItemById(item.itemId, branchId)
-        if (!menuItem || !menuItem.isAvailable) throw orderError('Menu item unavailable', 400)
-        createdItems.push(await orderItems.createOrderItem({ orderId: order.id, branchId, itemId: menuItem.id, name: menuItem.name, unitPrice: menuItem.price, quantity: item.quantity, notes: item.notes }))
+      for (const { entry, menuItem } of resolved) {
+        createdItems.push(await orderItems.createOrderItem({ orderId: order.id, branchId, itemId: menuItem.id, name: menuItem.name, unitPrice: menuItem.price, quantity: entry.quantity, notes: entry.notes }))
       }
       return { order, items: createdItems, canCancelUntil: new Date(Date.now() + 2 * 60 * 1000).toISOString() }
     },
