@@ -1,0 +1,4 @@
+ALTER TABLE bills
+  ADD COLUMN IF NOT EXISTS checkout_requested_at TIMESTAMPTZ NULL,
+  ADD COLUMN IF NOT EXISTS checkout_approved_at TIMESTAMPTZ NULL,
+  ADD COLUMN IF NOT EXISTS checkout_request_method VARCHAR(40) NULL;

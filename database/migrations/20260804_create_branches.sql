@@ -1,0 +1,15 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS branches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(160) NOT NULL,
+  address TEXT NOT NULL,
+  contact_phone VARCHAR(40) NOT NULL,
+  contact_email VARCHAR(320) NOT NULL,
+  tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  opening_hours TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  deactivated_at TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

@@ -1,0 +1,12 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID NOT NULL UNIQUE REFERENCES branches(id) ON DELETE CASCADE,
+  tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  cancellation_window_minutes INTEGER NOT NULL DEFAULT 2,
+  low_stock_threshold NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  receipt_footer TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

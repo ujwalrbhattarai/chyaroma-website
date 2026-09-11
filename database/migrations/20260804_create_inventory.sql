@@ -1,0 +1,41 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS ingredients (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  name VARCHAR(200) NOT NULL,
+  unit VARCHAR(40) NOT NULL,
+  stock_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  low_stock_threshold NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (branch_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  name VARCHAR(200) NOT NULL,
+  contact_name VARCHAR(200) NOT NULL DEFAULT '',
+  contact_phone VARCHAR(40) NOT NULL DEFAULT '',
+  contact_email VARCHAR(320) NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (branch_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS purchases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
+  supplier_id UUID NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+  quantity NUMERIC(12, 2) NOT NULL,
+  unit_cost NUMERIC(12, 2) NOT NULL,
+  purchase_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

@@ -1,0 +1,2 @@
+ALTER TABLE branch_tables
+  ADD COLUMN IF NOT EXISTS customer_occupied BOOLEAN NOT NULL DEFAULT FALSE;

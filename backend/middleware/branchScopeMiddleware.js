@@ -1,0 +1,2 @@
+// Prepared for future branch-scoped modules; never attach this to public QR/customer routes.
+export function establishBranchScope(request, _response, next) { if (!request.user) return next(Object.assign(new Error('Authentication required'), { statusCode: 401 })); request.branchScope = request.user.role === 'super_admin' ? { allBranches: true, branchId: null } : { allBranches: false, branchId: request.user.branchId }; next() }
