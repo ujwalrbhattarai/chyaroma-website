@@ -98,6 +98,26 @@ export async function resolveTransferRequest(id, status, resolvedBy) {
   return mapTransfer(res.rows[0])
 }
 
+// True if this device still has any open (unpaid) order on the given table.
+export async function deviceHasOpenTabOnTable(deviceId, tableId) {
+  if (!deviceId) return false
+  const res = await pool.query(
+    `SELECT EXISTS(
+       SELECT 1 FROM orders o
+       WHERE o.device_id = $1 AND o.table_id = $2
+         AND o.status != 'cancelled'
+         AND NOT EXISTS (
+           SELECT 1 FROM bills b
+           WHERE b.checkout_approved_at IS NOT NULL
+             AND jsonb_typeof(b.order_ids) = 'array'
+             AND b.order_ids @> to_jsonb(ARRAY[o.id::text])
+         )
+     ) AS owned`,
+    [deviceId, tableId],
+  )
+  return res.rows[0]?.owned ?? false
+}
+
 // Move all of a device's open orders (and the draft bill that holds them) from one
 // table to another so the person stays accountable at the destination table.
 export async function transferTab(branchId, deviceId, fromTableId, toTableId) {

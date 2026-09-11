@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listTables } from '../../services/tableService'
-import { getTableBill } from '../../services/billingService'
+import { completeCashPayment, getTableBill } from '../../services/billingService'
 
 // Reusable table-floor board: shows every active table as a box. Clicking a box
 // fetches that table's current bill and shows its TOTAL so cashiers/managers can
@@ -11,6 +11,8 @@ export default function TableBillBoard({ branchId }) {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null) // { table, bill, notFound }
   const [billLoading, setBillLoading] = useState(null) // tableNumber being fetched
+  const [settling, setSettling] = useState(false)
+  const [settleMsg, setSettleMsg] = useState('')
 
   const fetchTables = async () => {
     try {
@@ -48,6 +50,26 @@ export default function TableBillBoard({ branchId }) {
       setSelected({ table, bill: null, notFound: true })
     } finally {
       setBillLoading(null)
+    }
+  }
+
+  const isPaid = Boolean(selected?.bill?.checkoutApprovedAt || selected?.bill?.status === 'finalized')
+
+  // Cashier/manager can settle a table's bill directly — useful when the customer's
+  // phone is dead or they never initiated checkout from their side.
+  async function handleSettle() {
+    if (!selected?.bill?.id || settling) return
+    setSettling(true)
+    setSettleMsg('')
+    try {
+      await completeCashPayment(selected.bill.id)
+      setSettleMsg(`Table #${selected.table.tableNumber} settled — table is now vacant.`)
+      setSelected(null)
+      fetchTables()
+    } catch (err) {
+      setSettleMsg(err.message || 'Failed to settle bill')
+    } finally {
+      setSettling(false)
     }
   }
 
@@ -152,6 +174,21 @@ export default function TableBillBoard({ branchId }) {
                     {selected.bill.status === 'finalized' ? 'Finalized / Paid' : 'Open / Unpaid'}
                   </span>
                 </div>
+
+                {settleMsg && (
+                  <p className={`rounded-xl p-3 text-xs ${settleMsg.toLowerCase().includes('settled') ? 'bg-emerald-950/40 border border-emerald-500/40 text-emerald-300' : 'bg-red-950/40 border border-red-800/50 text-red-300'}`}>
+                    {settleMsg}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSettle}
+                  disabled={settling || isPaid}
+                  className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {settling ? 'Settling payment…' : isPaid ? 'Already Paid' : 'Mark Paid & Clear Table'}
+                </button>
               </>
             )}
           </div>

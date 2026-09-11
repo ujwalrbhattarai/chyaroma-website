@@ -5,6 +5,7 @@ import * as orderItemRepository from '../repositories/orderItemRepository.js'
 import * as paymentRepository from '../repositories/paymentRepository.js'
 import * as settingsRepository from '../repositories/settingsRepository.js'
 import * as tableRepository from '../repositories/tableRepository.js'
+import * as deviceRepository from '../repositories/deviceRepository.js'
 import { deductInventoryForOrder } from './inventoryDeduction.js'
 
 const billingError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
@@ -12,12 +13,19 @@ const billingEvents = new EventEmitter()
 
 function calculateTax(subtotal, taxRate) { return Number((subtotal * (Number(taxRate) / 100)).toFixed(2)) }
 
-export function createBillingService({ bills = billRepository, orders = orderRepository, orderItems = orderItemRepository, payments = paymentRepository, settings = settingsRepository, tables = tableRepository, deduct = (branchId, orderId) => deductInventoryForOrder(branchId, orderId) } = {}) {
+export function createBillingService({ bills = billRepository, orders = orderRepository, orderItems = orderItemRepository, payments = paymentRepository, settings = settingsRepository, tables = tableRepository, devices = deviceRepository, deduct = (branchId, orderId) => deductInventoryForOrder(branchId, orderId) } = {}) {
   return {
-    async requestPublicBill(tableToken) {
+    async requestPublicBill(tableToken, deviceId) {
       if (!tableToken) throw billingError('Table token is required', 400)
       const table = await tables.findTableByToken(tableToken)
       if (!table) throw billingError('Invalid table token', 403)
+      // Privacy/safety: a customer may only see this table's bill if their device has an
+      // open tab here. Otherwise a stranger re-scanning the table would inherit the
+      // previous guest's unpaid bill (cross-phone scam).
+      if (deviceId) {
+        const owned = await devices.deviceHasOpenTabOnTable(deviceId, table.id)
+        if (!owned) throw billingError('No billable orders found', 404)
+      }
       const bill = await this.syncDraftBill(table.branchId, table.id)
       if (bill) return bill
       // All orders are already billed. If a checkout is pending (requested but not yet
@@ -94,12 +102,18 @@ export function createBillingService({ bills = billRepository, orders = orderRep
       return bills.createBill({ branchId, tableId: original.tableId, orderIds: original.orderIds, subtotal: payload.subtotal ?? original.subtotal, taxRate: payload.taxRate ?? original.taxRate, taxAmount: payload.taxAmount ?? original.taxAmount, discountAmount: payload.discountAmount ?? original.discountAmount, totalAmount: payload.totalAmount ?? original.totalAmount, paymentMethod: payload.paymentMethod ?? original.paymentMethod, adjustmentOfBillId: original.id, status: 'adjustment', immutableAt: new Date().toISOString() })
     },
     async finalizeBill(branchId, billId) { const bill = await bills.findBillById(billId, branchId); if (!bill) throw billingError('Bill not found', 404); return bills.finalizeBill(billId, branchId) },
-    async checkoutPublicBill(tableToken, billId, method = 'cash') {
+    async checkoutPublicBill(tableToken, billId, method = 'cash', deviceId) {
       if (!tableToken) throw billingError('Table token is required', 400)
       const table = await tables.findTableByToken(tableToken)
       if (!table) throw billingError('Invalid table token', 403)
       const bill = await bills.findBillById(billId, table.branchId)
       if (!bill || bill.tableId !== table.id) throw billingError('Bill not found', 404)
+      // Only the device that actually placed the order on this table may request the
+      // checkout — prevent a stranger from touching a previous guest's unpaid bill.
+      if (deviceId) {
+        const owned = await devices.deviceHasOpenTabOnTable(deviceId, table.id)
+        if (!owned) throw billingError('You can only check out a bill for an order placed on this device', 403)
+      }
       if (bill.checkoutApprovedAt) throw billingError('Checkout has already been approved', 409)
       const loadItems = async () => {
         const items = []

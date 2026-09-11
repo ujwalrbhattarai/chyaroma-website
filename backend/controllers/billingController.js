@@ -1,5 +1,10 @@
 import { addAdjustment, approveCheckout, checkoutPublicBill, completeCashPayment, finalizeBill, generateBill, getTableBillByNumber, listBranchBills, mutateBillAttempt, recordPayment, requestPublicBill } from '../services/billingService.js'
 
+function deviceIdFrom(request) {
+  const value = request.headers['x-device-id']
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 64) : null
+}
+
 export async function generateBillHandler(request, response, next) {
   try {
     response.status(201).json({ bill: await generateBill(request.user.branchId, request.body.tableId) })
@@ -8,13 +13,15 @@ export async function generateBillHandler(request, response, next) {
 
 export async function publicRequestBillHandler(request, response, next) {
   try {
-    response.status(201).json({ bill: await requestPublicBill(request.body.token) })
+    const deviceId = deviceIdFrom(request)
+    response.status(201).json({ bill: await requestPublicBill(request.body.token, deviceId) })
   } catch (error) { next(error) }
 }
 
 export async function publicCheckoutBillHandler(request, response, next) {
   try {
-    response.status(200).json({ bill: await checkoutPublicBill(request.body.token, request.body.billId, request.body.method) })
+    const deviceId = deviceIdFrom(request)
+    response.status(200).json({ bill: await checkoutPublicBill(request.body.token, request.body.billId, request.body.method, deviceId) })
   } catch (error) { next(error) }
 }
 

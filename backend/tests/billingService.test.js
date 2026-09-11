@@ -9,11 +9,12 @@ const sampleOrder = { id: 'ord-1', branchId: BRANCH, tableId: TABLE, status: 're
 const sampleItem  = { id: 'oi-1', orderId: 'ord-1', branchId: BRANCH, unitPrice: 100, quantity: 2 }
 const sampleBill  = { id: 'bill-1', branchId: BRANCH, tableId: TABLE, subtotal: 200, taxRate: 10, taxAmount: 20, discountAmount: 0, totalAmount: 220, status: 'draft', immutableAt: null }
 
-const makeService = ({ orderList = [sampleOrder], orderItemList = [sampleItem], billList = [], paymentList = [], taxRate = 10, tables = null } = {}) => {
+const makeService = ({ orderList = [sampleOrder], orderItemList = [sampleItem], billList = [], paymentList = [], taxRate = 10, tables = null, devices = null } = {}) => {
   const bills = [...billList]
   const payments = [...paymentList]
   return createBillingService({
     deduct: async () => {},
+    devices: devices ?? { deviceHasOpenTabOnTable: async () => true },
     bills: {
       findBillById:           async (id, branchId) => bills.find((b) => b.id === id && b.branchId === branchId) ?? null,
       findBillByIdAcrossBranches: async (id) => bills.find((b) => b.id === id) ?? null,
@@ -258,4 +259,21 @@ test('requestPublicBill keeps returning an existing draft bill once all orders a
   const bill = await service.requestPublicBill('tok-1')
   assert.equal(bill.id, 'draft-1')
   assert.ok(bill.items.length > 0)
+})
+
+test('requestPublicBill hides a table bill from a device that did not place the order', async () => {
+  // Reproduces the reported cross-phone leak: a stranger re-scanning a table that has a
+  // stranded unpaid bill must NOT see it. Only the device with an open tab can.
+  const table = { id: TABLE, branchId: BRANCH, qrToken: 'tok-1' }
+  const staleDraft = { ...sampleBill, id: 'stale-draft', status: 'draft', orderIds: ['ord-x'], createdAt: new Date().toISOString() }
+  const service = makeService({
+    orderList: [],
+    billList: [staleDraft],
+    tables: { findTableByToken: async (token) => token === 'tok-1' ? table : null },
+    devices: { deviceHasOpenTabOnTable: async (deviceId, tableId) => false },
+  })
+  await assert.rejects(
+    () => service.requestPublicBill('tok-1', 'stranger-device'),
+    /No billable orders found/,
+  )
 })
