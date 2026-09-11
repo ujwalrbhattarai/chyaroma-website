@@ -31,6 +31,7 @@ const migrations = [
   '20260909_staff_login_separation.sql',
   '20260909_fix_staff_role_constraints.sql',
   '20260910_cashier_and_inventory_idempotency.sql',
+  '20260912_add_device_id_and_transfers.sql',
 ]
 
 const connectionString = process.env.DATABASE_URL_UNPOOLED

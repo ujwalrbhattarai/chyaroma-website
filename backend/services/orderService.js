@@ -45,7 +45,7 @@ export function createOrderService({ orders = orderRepository, orderItems = orde
       }
       return { table, menu: await menus.listMenuItems(table.branchId), categories: await menus.listCategories(table.branchId) }
     },
-    async placeOrder({ branchId, tableToken, notes, items }) {
+    async placeOrder({ branchId, tableToken, notes, items, deviceId }) {
       if (!branchId || !tableToken) throw orderError('branchId and table token are required')
       const table = await tables.findTableByToken(tableToken)
       if (!table || !table.isActive || table.branchId !== branchId) throw orderError('Invalid table token', 403)
@@ -58,7 +58,7 @@ export function createOrderService({ orders = orderRepository, orderItems = orde
         if (!menuItem || !menuItem.isAvailable) throw orderError('Menu item unavailable', 400)
         resolved.push({ entry, menuItem })
       }
-      const order = await orders.createOrder({ branchId, tableId: table.id, notes })
+      const order = await orders.createOrder({ branchId, tableId: table.id, notes, deviceId })
       const createdItems = []
       for (const { entry, menuItem } of resolved) {
         createdItems.push(await orderItems.createOrderItem({ orderId: order.id, branchId, itemId: menuItem.id, name: menuItem.name, unitPrice: menuItem.price, quantity: entry.quantity, notes: entry.notes }))

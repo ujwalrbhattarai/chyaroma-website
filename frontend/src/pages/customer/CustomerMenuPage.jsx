@@ -40,8 +40,16 @@ export default function CustomerMenuPage({ navigate }) {
         setManualTokenInput(false)
       })
       .catch((err) => {
-        setError(err.message || 'Invalid or expired QR token.')
-        setManualTokenInput(true)
+        const msg = err.message || ''
+        if (/staff approve|open bill|must approve|table change|transfer/i.test(msg)) {
+          // The same device has an open (unpaid) tab on another table. Lock the menu
+          // and ask staff to approve the move.
+          setError('This phone has an open bill on another table. Please ask the cashier or manager to approve your table change before ordering here.')
+          setManualTokenInput(false)
+        } else {
+          setError(msg || 'Invalid or expired QR token.')
+          setManualTokenInput(true)
+        }
       })
       .finally(() => setLoading(false))
   }, [token])
@@ -86,7 +94,12 @@ export default function CustomerMenuPage({ navigate }) {
       setCart({})
       navigate(`/table/order-status?token=${encodeURIComponent(token)}`)
     } catch (err) {
-      setError(err.message || 'Failed to place order.')
+      const msg = err.message || ''
+      if (/staff approve|open bill|must approve|table change|transfer/i.test(msg)) {
+        setError('Your table change needs staff approval. Please ask the cashier or manager first.')
+      } else {
+        setError(msg || 'Failed to place order.')
+      }
       setSubmitting(false)
     }
   }

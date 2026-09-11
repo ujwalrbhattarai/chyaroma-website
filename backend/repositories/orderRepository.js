@@ -13,13 +13,14 @@ const mapOrder = (row) => row && ({
   completedAt: row.completed_at,
   cancelledAt: row.cancelled_at,
   customerVisible: row.customer_visible,
+  deviceId: row.device_id ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
-export async function createOrder({ branchId, tableId, notes }) {
+export async function createOrder({ branchId, tableId, notes, deviceId }) {
   return mapOrder((await pool.query(
-    'INSERT INTO orders (branch_id, table_id, status, notes) VALUES ($1, $2, $3, $4) RETURNING *',
-    [branchId, tableId, 'pending', notes ?? ''],
+    'INSERT INTO orders (branch_id, table_id, status, notes, device_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [branchId, tableId, 'pending', notes ?? '', deviceId ?? null],
   )).rows[0])
 }
 export async function findOrderById(id, branchId) {

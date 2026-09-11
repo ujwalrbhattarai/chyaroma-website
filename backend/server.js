@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv'
-dotenv.config({ path: new URL('.env', import.meta.url) })
+dotenv.config({ path: new URL('../.env.local', import.meta.url) })
 import http from 'node:http'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
@@ -19,6 +19,8 @@ import staffRoutes from './routes/staffRoutes.js'
 import tableRoutes from './routes/tableRoutes.js'
 import demoRoutes from './routes/demoRoutes.js'
 import superAdminRoutes from './routes/superAdminRoutes.js'
+import transferRoutes from './routes/transferRoutes.js'
+import { transferEvents } from './services/transferService.js'
 import { uploadRoot } from './middleware/uploadMiddleware.js'
 import { bootstrapSuperAdmin } from './services/authService.js'
 import { bootstrapDemoBranch, setIo as setDemoIo } from './services/demoService.js'
@@ -75,12 +77,15 @@ app.use('/api/inventory', inventoryRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/demo', demoRoutes)
 app.use('/api/admin/super-admins', superAdminRoutes)
+app.use('/api/transfers', transferRoutes)
 
 app.use((error, request, response, next) => {
   console.error('API error:', error)
   const status = error.statusCode ?? 500
   const message = status === 500 ? 'Internal server error' : error.message
-  response.status(status).json({ error: message })
+  const body = { error: message }
+  if (status === 409 && error.transfer) body.transfer = error.transfer
+  response.status(status).json(body)
 })
 
 kitchenEvents.on('order-updated', ({ branchId, order }) => {
@@ -91,6 +96,14 @@ billingEvents.on('bill-updated', ({ branchId, bill }) => {
 	io.to(`branch:${branchId}`).emit('bill-updated', { branchId, bill })
 })
 
+// Staff-only table-transfer alerts (customers never receive these).
+transferEvents.on('transfer-requested', ({ branchId, transfer }) => {
+	io.to(`staff:${branchId}`).emit('table-transfer-requested', { transfer })
+})
+transferEvents.on('transfer-resolved', ({ branchId, transfer }) => {
+	io.to(`staff:${branchId}`).emit('table-transfer-resolved', { transfer })
+})
+
 io.on('connection', (socket) => {
 	socket.emit('connected', { ok: true })
 	// Client sends { branchId } immediately after connect to join their branch room
@@ -99,6 +112,13 @@ io.on('connection', (socket) => {
 			const branchKey = String(branchId)
 			socket.join(`branch:${branchKey}`)
 			socket.emit('joined-branch', { branchId: branchKey })
+		}
+	})
+	// Staff sockets join a staff-only room so table-transfer alerts never reach customers.
+	socket.on('join-staff', ({ branchId } = {}) => {
+		if (branchId !== undefined && branchId !== null) {
+			socket.join(`staff:${String(branchId)}`)
+			socket.emit('joined-staff', { branchId: String(branchId) })
 		}
 	})
 	// Demo visitor joins their isolated demo room

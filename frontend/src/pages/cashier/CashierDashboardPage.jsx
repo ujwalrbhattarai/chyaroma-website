@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import PageShell from '../../components/shared/PageShell'
 import { completeCashPayment, getTableBill, listBranchBills } from '../../services/billingService'
+import TableTransferPanel from '../../components/staff/TableTransferPanel'
 
 function playNotificationChime() {
   try {
@@ -413,6 +414,8 @@ export default function CashierDashboardPage({ navigate, session, setSession }) 
 
           {/* Right Column: Pending Checkout Requests Queue */}
           <div className="space-y-6">
+            <TableTransferPanel branchId={branchId} />
+
             <section className="neo-card rounded-2xl p-6">
               <div className="flex items-center justify-between border-b border-[#1E2435] pb-4 mb-4">
                 <div>
