@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { listTables } from '../../services/tableService'
+import { io } from 'socket.io-client'
+import { listTables, forceReleaseTable } from '../../services/tableService'
 import { completeCashPayment, getTableBill } from '../../services/billingService'
 
-// Reusable table-floor board: shows every active table as a box. Clicking a box
-// fetches that table's current bill and shows its TOTAL so cashiers/managers can
-// read the amount at a glance without relying on the customer's phone.
+// Reusable table-floor board: shows every active table as a box. Each occupied table
+// shows its CURRENT running bill total (even before the customer requests a bill), and
+// clicking a box fetches the full bill so cashiers/managers can settle or release it.
 export default function TableBillBoard({ branchId }) {
   const [tables, setTables] = useState([])
   const [loading, setLoading] = useState(true)
@@ -13,6 +14,8 @@ export default function TableBillBoard({ branchId }) {
   const [billLoading, setBillLoading] = useState(null) // tableNumber being fetched
   const [settling, setSettling] = useState(false)
   const [settleMsg, setSettleMsg] = useState('')
+  const [releasing, setReleasing] = useState(false)
+  const [releaseMsg, setReleaseMsg] = useState('')
 
   const fetchTables = async () => {
     try {
@@ -36,12 +39,28 @@ export default function TableBillBoard({ branchId }) {
     return () => clearInterval(timer)
   }, [branchId])
 
+  // Real-time refresh so a table's running bill (and release status) updates instantly
+  // when the customer orders, requests a bill, or when any staff member settles/releases.
+  useEffect(() => {
+    if (!branchId) return
+    const socket = io(import.meta.env.VITE_SOCKET_URL ?? window.location.origin, { transports: ['websocket'] })
+    socket.on('connect', () => {
+      socket.emit('join-branch', { branchId: String(branchId) })
+      socket.emit('join-staff', { branchId: String(branchId) })
+    })
+    socket.on('table-updated', fetchTables)
+    socket.on('bill-updated', fetchTables)
+    return () => socket.disconnect()
+  }, [branchId])
+
   const activeTables = tables.filter((t) => t.isActive)
   const occupiedTables = activeTables.filter((t) => t.isOccupied)
 
   async function openTable(table) {
     setBillLoading(table.tableNumber)
     setError('')
+    setSettleMsg('')
+    setReleaseMsg('')
     try {
       const data = await getTableBill(table.tableNumber)
       setSelected({ table, bill: data.bill ?? null, notFound: false })
@@ -73,12 +92,30 @@ export default function TableBillBoard({ branchId }) {
     }
   }
 
+  // Release the table WITHOUT requiring payment — clears the occupancy regardless of
+  // whether the customer has paid (force-release cancels open orders and draft bills).
+  async function handleForceRelease() {
+    if (!selected?.table?.id || releasing) return
+    setReleasing(true)
+    setReleaseMsg('')
+    try {
+      await forceReleaseTable(selected.table.id, branchId)
+      setReleaseMsg(`Table #${selected.table.tableNumber} released (no payment recorded).`)
+      setSelected(null)
+      fetchTables()
+    } catch (err) {
+      setReleaseMsg(err.message || 'Failed to release table')
+    } finally {
+      setReleasing(false)
+    }
+  }
+
   return (
     <section className="neo-card rounded-2xl p-6">
       <div className="flex items-center justify-between border-b border-[#1E2435] pb-4 mb-4">
         <div>
           <h2 className="text-base font-bold text-white">Table Bills</h2>
-          <p className="text-xs text-[#9CA3AF]">Tap a table to see its total bill</p>
+          <p className="text-xs text-[#9CA3AF]">Running bill per table — no need to wait for the customer to request</p>
         </div>
         <span className="rounded-full bg-amber-500/20 border border-amber-500/30 px-3 py-0.5 text-xs font-bold text-amber-300">
           {occupiedTables.length} occupied
@@ -95,32 +132,40 @@ export default function TableBillBoard({ branchId }) {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {activeTables.map((table) => (
-            <article
-              key={table.id}
-              onClick={() => openTable(table)}
-              className={`cursor-pointer rounded-xl border p-4 transition-all hover:scale-[1.03] ${
-                table.isOccupied
-                  ? 'bg-red-950/30 border-red-500/40'
-                  : 'bg-emerald-950/30 border-emerald-500/40'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-black text-white">#{table.tableNumber}</h3>
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${table.isOccupied ? 'bg-red-500 animate-pulse' : 'bg-emerald-400'}`}
-                />
-              </div>
-              {table.label && <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">{table.label}</p>}
-              <p className="mt-2 text-[11px] font-bold tracking-wider">
-                {billLoading === table.tableNumber
-                  ? 'Checking…'
-                  : table.isOccupied
-                    ? 'View bill →'
-                    : 'Vacant'}
-              </p>
-            </article>
-          ))}
+          {activeTables.map((table) => {
+            const hasBill = table.isOccupied && Number(table.currentBillTotal) > 0
+            return (
+              <article
+                key={table.id}
+                onClick={() => openTable(table)}
+                className={`cursor-pointer rounded-xl border p-4 transition-all hover:scale-[1.03] ${
+                  table.isOccupied
+                    ? 'bg-red-950/30 border-red-500/40'
+                    : 'bg-emerald-950/30 border-emerald-500/40'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-black text-white">#{table.tableNumber}</h3>
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${table.isOccupied ? 'bg-red-500 animate-pulse' : 'bg-emerald-400'}`}
+                  />
+                </div>
+                {table.label && <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">{table.label}</p>}
+                {hasBill ? (
+                  <p className="mt-2 text-base font-black text-[#F5A623]">
+                    Rs {Number(table.currentBillTotal).toFixed(2)}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[11px] font-bold tracking-wider text-[#8B93A7]">
+                    {table.isOccupied ? 'No items yet' : 'Vacant'}
+                  </p>
+                )}
+                <p className="mt-1 text-[10px] font-bold tracking-wider text-[#6B7280]">
+                  {billLoading === table.tableNumber ? 'Checking…' : table.isOccupied ? 'View bill →' : '—'}
+                </p>
+              </article>
+            )
+          })}
         </div>
       )}
 
@@ -145,6 +190,11 @@ export default function TableBillBoard({ branchId }) {
               <div className="rounded-xl border border-dashed border-[#1F2937] p-6 text-center">
                 <p className="text-sm text-[#9CA3AF]">No active bill for this table yet.</p>
                 <p className="mt-1 text-xs text-[#6B7280]">The bill appears once a customer orders.</p>
+                {Number(selected.table.currentBillTotal) > 0 && (
+                  <p className="mt-3 text-sm font-black text-[#F5A623]">
+                    Running total: Rs {Number(selected.table.currentBillTotal).toFixed(2)}
+                  </p>
+                )}
               </div>
             ) : (
               <>
@@ -191,6 +241,23 @@ export default function TableBillBoard({ branchId }) {
                 </button>
               </>
             )}
+
+            <div className="rounded-xl border border-red-800/40 bg-red-950/20 p-3">
+              <p className="text-[11px] font-bold text-red-300 mb-2">Customer hasn't paid? Release the table anyway (cancels open orders / draft bills, no payment recorded)</p>
+              {releaseMsg && (
+                <p className={`mb-2 rounded-lg p-2 text-xs ${releaseMsg.toLowerCase().includes('released') ? 'bg-emerald-950/40 border border-emerald-500/40 text-emerald-300' : 'bg-red-950/40 border border-red-800/50 text-red-300'}`}>
+                  {releaseMsg}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleForceRelease}
+                disabled={releasing}
+                className="w-full rounded-xl border border-red-600/60 bg-red-900/40 py-2.5 text-sm font-bold text-red-100 hover:bg-red-800/50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {releasing ? 'Releasing table…' : 'Force Release (no payment)'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { Pool } from 'pg'
 import * as dotenv from 'dotenv'
-dotenv.config({ path: new URL('../.env', import.meta.url) })
+dotenv.config({ path: new URL('../../.env.local', import.meta.url) })
 
 const connectionString = process.env.DATABASE_URL
 

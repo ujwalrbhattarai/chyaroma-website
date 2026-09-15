@@ -19,26 +19,35 @@ export function createBillingService({ bills = billRepository, orders = orderRep
       if (!tableToken) throw billingError('Table token is required', 400)
       const table = await tables.findTableByToken(tableToken)
       if (!table) throw billingError('Invalid table token', 403)
-      // Privacy/safety: a customer may only see this table's bill if their device has an
-      // open tab here. Otherwise a stranger re-scanning the table would inherit the
-      // previous guest's unpaid bill (cross-phone scam).
-      if (deviceId) {
-        const owned = await devices.deviceHasOpenTabOnTable(deviceId, table.id)
-        if (!owned) throw billingError('No billable orders found', 404)
+      const latestBill = (await bills.listBillsByTable(table.branchId, table.id))[0]
+      const deviceHasTab = deviceId ? await devices.deviceHasOpenTabOnTable(deviceId, table.id) : null
+
+      // Anti-scam: a stranger (a device with NO open tab here) must never see an unpaid/stranded
+      // bill belonging to another guest. An APPROVED (paid) bill is safe to show because the table
+      // is vacant and the items are emptied — this is also exactly what lets a customer's phone show
+      // the "thank you" screen after the cashier approves checkout (approval clears the device's tab).
+      if (deviceHasTab === false) {
+        if (latestBill && latestBill.checkoutApprovedAt) {
+          return { ...latestBill, items: [] }
+        }
+        throw billingError('No billable orders found', 404)
       }
+
+      // Otherwise this is the owning device (or a non-device client): surface the live bill.
       const bill = await this.syncDraftBill(table.branchId, table.id)
       if (bill) return bill
-      // All orders are already billed. If a checkout is pending (requested but not yet
-      // approved), return the bill WITH its items so the customer still sees their total
-      // while the cashier approves the payment — only show "thank you" AFTER approval.
-      const latestBill = (await bills.listBillsByTable(table.branchId, table.id))[0]
+      // All orders are already billed. If checkout is pending (requested, not yet approved), keep
+      // returning the bill WITH items so the customer still sees their total while the cashier
+      // approves — only show "thank you" AFTER approval.
       if (latestBill && latestBill.checkoutRequestedAt && !latestBill.checkoutApprovedAt) {
         const items = []
         for (const orderId of latestBill.orderIds ?? []) items.push(...await orderItems.listOrderItems(orderId, table.branchId))
         return { ...latestBill, items }
       }
-      const approvedBill = await bills.findLatestApprovedBillByTable(table.branchId, table.id)
-      if (approvedBill) return { ...approvedBill, items: [] }
+      // The table is fully paid/vacant (approved bill with nothing new) — confirm the thank-you state.
+      if (latestBill && latestBill.checkoutApprovedAt) {
+        return { ...latestBill, items: [] }
+      }
       throw billingError('No billable orders found', 404)
     },
     async generateBill(branchId, tableId) {

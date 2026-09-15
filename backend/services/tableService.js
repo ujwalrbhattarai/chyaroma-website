@@ -1,16 +1,24 @@
 import { randomUUID } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import QRCode from 'qrcode'
 import * as tableRepository from '../repositories/tableRepository.js'
 import * as orderRepository from '../repositories/orderRepository.js'
 import * as billRepository from '../repositories/billRepository.js'
 
 const tableError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
+const tableEvents = new EventEmitter()
 export function assertTableAccess(user) {
   if (!user || !['super_admin', 'branch_manager'].includes(user.role)) throw tableError('Forbidden', 403)
 }
 
+// Staff who may clear / release a table even when the customer has not paid yet.
+// Cashiers handle checkout at the counter, so they are permitted to force-release.
+export function assertTableReleaseAccess(user) {
+  if (!user || !['super_admin', 'branch_manager', 'cashier'].includes(user.role)) throw tableError('Forbidden', 403)
+}
+
 export function assertTableReadAccess(user) {
-  if (!user || !['super_admin', 'branch_manager', 'kitchen_staff'].includes(user.role)) throw tableError('Forbidden', 403)
+  if (!user || !['super_admin', 'branch_manager', 'kitchen_staff', 'cashier'].includes(user.role)) throw tableError('Forbidden', 403)
 }
 
 function resolveBranchId(user, requestedBranchId) {
@@ -103,7 +111,7 @@ export function createTableService({ repository = tableRepository, orders = orde
       return { released: true, table: { ...table, customerOccupied: false } }
     },
     async forceReleaseTable(user, requestedBranchId, tableId) {
-      assertTableAccess(user)
+      assertTableReleaseAccess(user)
       const branchId = resolveBranchId(user, requestedBranchId)
       if (!branchId) throw tableError('branchId is required', 400)
       const table = await repository.findTableById(tableId, branchId)
@@ -111,7 +119,9 @@ export function createTableService({ repository = tableRepository, orders = orde
       await orders.cancelPendingOrdersByTable(branchId, tableId)
       await bills.deleteDraftBillsByTable(branchId, tableId)
       await repository.setCustomerOccupied(tableId, branchId, false)
-      return repository.setManualOccupied(tableId, branchId, false)
+      const released = await repository.setManualOccupied(tableId, branchId, false)
+      tableEvents.emit('table-updated', { branchId, table: released })
+      return released
     },
     async generateQrCode(token) {
       const url = buildMenuUrl(token)
@@ -129,3 +139,4 @@ export const validateScanToken = (...args) => service.validateScanToken(...args)
 export const releaseTable = (...args) => service.releaseTable(...args)
 export const forceReleaseTable = (...args) => service.forceReleaseTable(...args)
 export const generateQrCode = (...args) => service.generateQrCode(...args)
+export { tableEvents }

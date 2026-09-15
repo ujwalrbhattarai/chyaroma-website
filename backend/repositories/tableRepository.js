@@ -40,7 +40,25 @@ export async function listTablesWithOccupancy(branchId) {
                     SELECT a.order_id FROM approved_order_ids a WHERE a.table_id = t.id
                   )
                 )
-            ) AS has_unpaid_draft_bill
+            ) AS has_unpaid_draft_bill,
+            -- Current running bill total for this table (what the customer would be billed
+            -- right now), even if the customer has not requested a bill yet. Computed from
+            -- unbilled orders plus the branch tax rate, mirroring the billing calculation.
+            COALESCE(
+              (
+                SELECT ROUND((SUM(oi.unit_price * oi.quantity)
+                       * (1 + COALESCE((SELECT s.tax_rate FROM settings s WHERE s.branch_id = t.branch_id), 0) / 100.0))::numeric, 2)
+                FROM orders o
+                JOIN order_items oi ON oi.order_id = o.id AND oi.branch_id = o.branch_id
+                WHERE o.branch_id = t.branch_id AND o.table_id = t.id
+                  AND o.status != 'cancelled'
+                  AND (o.is_demo IS NULL OR o.is_demo = FALSE)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM approved_order_ids a
+                    WHERE a.table_id = t.id AND a.order_id = o.id::text
+                  )
+              ), 0
+            ) AS current_bill_total
      FROM branch_tables t
      WHERE t.branch_id = $1
      ORDER BY t.table_number ASC`,
@@ -51,6 +69,7 @@ export async function listTablesWithOccupancy(branchId) {
     const autoOccupied = row.has_active_orders || row.has_unpaid_draft_bill
     return {
       ...table,
+      currentBillTotal: Number(row.current_bill_total ?? 0),
       autoOccupied,
       isOccupied: autoOccupied || row.manual_occupied || row.customer_occupied,
     }

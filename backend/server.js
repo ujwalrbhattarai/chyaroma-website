@@ -21,6 +21,7 @@ import demoRoutes from './routes/demoRoutes.js'
 import superAdminRoutes from './routes/superAdminRoutes.js'
 import transferRoutes from './routes/transferRoutes.js'
 import { transferEvents } from './services/transferService.js'
+import { tableEvents } from './services/tableService.js'
 import { uploadRoot } from './middleware/uploadMiddleware.js'
 import { bootstrapSuperAdmin } from './services/authService.js'
 import { bootstrapDemoBranch, setIo as setDemoIo } from './services/demoService.js'
@@ -94,6 +95,12 @@ kitchenEvents.on('order-updated', ({ branchId, order }) => {
 
 billingEvents.on('bill-updated', ({ branchId, bill }) => {
 	io.to(`branch:${branchId}`).emit('bill-updated', { branchId, bill })
+})
+
+// Table occupancy/availability changes (e.g. cashier force-releases an unpaid table)
+// so every staff dashboard's table board updates in real time.
+tableEvents.on('table-updated', ({ branchId, table }) => {
+	io.to(`staff:${branchId}`).emit('table-updated', { branchId, table })
 })
 
 // Staff-only table-transfer alerts (customers never receive these).

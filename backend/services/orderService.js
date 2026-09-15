@@ -2,6 +2,7 @@ import * as menuRepository from '../repositories/menuRepository.js'
 import * as orderRepository from '../repositories/orderRepository.js'
 import * as orderItemRepository from '../repositories/orderItemRepository.js'
 import * as tableRepository from '../repositories/tableRepository.js'
+import { kitchenEvents } from './kitchenService.js'
 
 const orderError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 
@@ -34,7 +35,7 @@ function normalizeOrderItems(items = []) {
   return normalized
 }
 
-export function createOrderService({ orders = orderRepository, orderItems = orderItemRepository, menus = menuRepository, tables = tableRepository } = {}) {
+export function createOrderService({ orders = orderRepository, orderItems = orderItemRepository, menus = menuRepository, tables = tableRepository, events = kitchenEvents } = {}) {
   return {
     async getPublicMenu(tableToken) {
       const table = await tables.findTableByToken(tableToken)
@@ -63,6 +64,8 @@ export function createOrderService({ orders = orderRepository, orderItems = orde
       for (const { entry, menuItem } of resolved) {
         createdItems.push(await orderItems.createOrderItem({ orderId: order.id, branchId, itemId: menuItem.id, name: menuItem.name, unitPrice: menuItem.price, quantity: entry.quantity, notes: entry.notes }))
       }
+      // Notify the kitchen in real time that a customer placed a new order.
+      events.emit('order-updated', { branchId, order })
       return { order, items: createdItems, canCancelUntil: new Date(Date.now() + 2 * 60 * 1000).toISOString() }
     },
     async getTableStatus(branchId, tableToken) {
