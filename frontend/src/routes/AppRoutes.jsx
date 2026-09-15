@@ -1,29 +1,31 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import LandingPage from '../pages/LandingPage'
 import LoginPage from '../pages/auth/LoginPage'
-import AdminDashboardPage from '../pages/admin/AdminDashboardPage'
-import BranchManagementPage from '../pages/admin/BranchManagementPage'
-import ManagerDashboardPage from '../pages/manager/ManagerDashboardPage'
-import MenuManagementPage from '../pages/manager/MenuManagementPage'
-import StaffManagementPage from '../pages/manager/StaffManagementPage'
-import InventoryPage from '../pages/manager/InventoryPage'
-import BillingPage from '../pages/manager/BillingPage'
-import SettingsPage from '../pages/manager/SettingsPage'
-import KitchenQueuePage from '../pages/kitchen/KitchenQueuePage'
-import KitchenTablesPage from '../pages/kitchen/KitchenTablesPage'
-import TableManagementPage from '../pages/manager/TableManagementPage'
-import ReportsPage from '../pages/manager/ReportsPage'
-import CustomerMenuPage from '../pages/customer/CustomerMenuPage'
-import CustomerOrderStatusPage from '../pages/customer/CustomerOrderStatusPage'
-import CustomerBillRequestPage from '../pages/customer/CustomerBillRequestPage'
-import DemoEntryPage from '../pages/demo/DemoEntryPage'
-import DemoMenuPage from '../pages/demo/DemoMenuPage'
-import DemoOrderStatusPage from '../pages/demo/DemoOrderStatusPage'
-import DemoBillPage from '../pages/demo/DemoBillPage'
-import DemoStatisticsPage from '../pages/admin/DemoStatisticsPage'
-import SuperAdminManagementPage from '../pages/admin/SuperAdminManagementPage'
-import CashierDashboardPage from '../pages/cashier/CashierDashboardPage'
-import WaiterPage from '../pages/waiter/WaiterPage'
+
+// Heavy pages are lazily loaded per-route so the initial download is small and fast.
+const AdminDashboardPage = lazy(() => import('../pages/admin/AdminDashboardPage'))
+const BranchManagementPage = lazy(() => import('../pages/admin/BranchManagementPage'))
+const ManagerDashboardPage = lazy(() => import('../pages/manager/ManagerDashboardPage'))
+const MenuManagementPage = lazy(() => import('../pages/manager/MenuManagementPage'))
+const StaffManagementPage = lazy(() => import('../pages/manager/StaffManagementPage'))
+const InventoryPage = lazy(() => import('../pages/manager/InventoryPage'))
+const BillingPage = lazy(() => import('../pages/manager/BillingPage'))
+const SettingsPage = lazy(() => import('../pages/manager/SettingsPage'))
+const KitchenQueuePage = lazy(() => import('../pages/kitchen/KitchenQueuePage'))
+const KitchenTablesPage = lazy(() => import('../pages/kitchen/KitchenTablesPage'))
+const TableManagementPage = lazy(() => import('../pages/manager/TableManagementPage'))
+const ReportsPage = lazy(() => import('../pages/manager/ReportsPage'))
+const CustomerMenuPage = lazy(() => import('../pages/customer/CustomerMenuPage'))
+const CustomerOrderStatusPage = lazy(() => import('../pages/customer/CustomerOrderStatusPage'))
+const CustomerBillRequestPage = lazy(() => import('../pages/customer/CustomerBillRequestPage'))
+const DemoEntryPage = lazy(() => import('../pages/demo/DemoEntryPage'))
+const DemoMenuPage = lazy(() => import('../pages/demo/DemoMenuPage'))
+const DemoOrderStatusPage = lazy(() => import('../pages/demo/DemoOrderStatusPage'))
+const DemoBillPage = lazy(() => import('../pages/demo/DemoBillPage'))
+const DemoStatisticsPage = lazy(() => import('../pages/admin/DemoStatisticsPage'))
+const SuperAdminManagementPage = lazy(() => import('../pages/admin/SuperAdminManagementPage'))
+const CashierDashboardPage = lazy(() => import('../pages/cashier/CashierDashboardPage'))
+const WaiterPage = lazy(() => import('../pages/waiter/WaiterPage'))
 
 const routes = {
   '/': { page: LandingPage },
@@ -90,5 +92,15 @@ export default function AppRoutes({ path, navigate, session, setSession, loading
   if (route.roles && loadingSession) return null
   if (isUnauthorized) return null
   const Page = route.page
-  return <Page navigate={navigate} setSession={setSession} session={session} />
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#0B0F1A]">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" />
+        </div>
+      }
+    >
+      <Page navigate={navigate} setSession={setSession} session={session} />
+    </Suspense>
+  )
 }

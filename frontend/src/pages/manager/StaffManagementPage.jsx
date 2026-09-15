@@ -145,7 +145,7 @@ export default function StaffManagementPage({ navigate, session }) {
           <p className="mb-5 text-xs text-[#9CA3AF] leading-relaxed">
             {isSuperAdmin
               ? 'Create a staff record or an application login account and assign them to a branch.'
-              : 'Add a staff member to your branch. Only Branch Managers and Kitchen Staff require an application login.'}
+              : 'Add a staff member to your branch. Roles marked (App Login) can sign in to the application with the password you set.'}
           </p>
 
           {error   && <p id="staff-form-error"   className="mb-4 rounded-xl bg-red-950/50 border border-red-800/50 p-3 text-sm text-red-300"     role="alert">{error}</p>}

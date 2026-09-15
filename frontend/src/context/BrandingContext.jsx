@@ -18,7 +18,7 @@ export default function BrandingProvider({ session, children }) {
         const s = data?.settings ?? {}
         const name = (s.cafeName || '').trim()
         setBranding({ cafeName: name, logoUrl: s.logoUrl || '' })
-        document.title = name || 'Staff Portal'
+        document.title = name || 'Chyaroma'
       })
       .catch(() => {})
     return () => { cancelled = true }

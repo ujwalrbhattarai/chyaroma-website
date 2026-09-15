@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
 import { login } from '../../services/authService'
 import { useBranding } from '../../context/BrandingContext'
 import logo from '../../logo.png'
@@ -46,33 +45,43 @@ export default function LoginPage({ navigate, setSession }) {
     }
   }
 
-  // Start the scanner only after the scanner div is mounted in the DOM.
+  // Start the scanner only after the scanner div is mounted in the DOM. The QR library
+// is imported on demand so it stays out of the initial bundle (keeps the page fast).
   useEffect(() => {
     if (!scanning) return
     let cancelled = false
-    const scanner = new Html5Qrcode(scannerDivId)
-    scannerRef.current = scanner
     setScanError('')
 
-    scanner
-      .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText) => {
-          const token = extractTokenFromUrl(decodedText)
-          if (token) {
-            stopScanner()
-            sessionStorage.setItem('cc_table_token', token)
-            navigate(`/table/menu?token=${encodeURIComponent(token)}`)
-          } else {
-            setScanError('No table token found in the scanned QR code.')
-          }
-        },
-        () => { },
-      )
+    import('html5-qrcode')
+      .then(({ Html5Qrcode }) => {
+        if (cancelled) return
+        const scanner = new Html5Qrcode(scannerDivId)
+        scannerRef.current = scanner
+        scanner
+          .start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 220, height: 220 } },
+            (decodedText) => {
+              const token = extractTokenFromUrl(decodedText)
+              if (token) {
+                stopScanner()
+                sessionStorage.setItem('cc_table_token', token)
+                navigate(`/table/menu?token=${encodeURIComponent(token)}`)
+              } else {
+                setScanError('No table token found in the scanned QR code.')
+              }
+            },
+            () => { },
+          )
+          .catch(() => {
+            if (cancelled) return
+            setScanError('Unable to access the camera. Please allow camera permission or enter the token manually.')
+            setScanning(false)
+          })
+      })
       .catch(() => {
         if (cancelled) return
-        setScanError('Unable to access the camera. Please allow camera permission or enter the token manually.')
+        setScanError('Unable to load the scanner on this device.')
         setScanning(false)
       })
 
@@ -190,12 +199,14 @@ export default function LoginPage({ navigate, setSession }) {
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 p-2 neo-inset border border-amber-500/30 shadow-lg shadow-amber-500/10">
             <img src={branding?.logoUrl || logo} alt="Chyaroma Logo" className="h-10 w-10 object-contain" />
           </div>
-          <span className="text-xs font-extrabold tracking-widest uppercase text-amber-400">
-            {branding?.cafeName || 'Chyaroma'}
+          <span className="text-[10px] font-black uppercase tracking-widest text-amber-500/90">
+            Staff Sign In
           </span>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Staff Portal</h1>
+          <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+            {branding?.cafeName || 'Chyaroma'}
+          </h1>
           <p className="mt-1.5 text-xs sm:text-sm text-[#9CA3AF]">
-            Super Admin, Branch Manager, Cashier & Kitchen Staff login
+            Sign in to manage orders, the kitchen, billing and tables.
           </p>
         </div>
 
