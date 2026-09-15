@@ -33,16 +33,24 @@ export default function DemoEntryPage({ navigate }) {
   }
 
   function handleScanSuccess(text) {
-    // Attempt to extract a token from the scanned URL
+    // Attempt to extract a token from the scanned/manually-pasted value (URL or bare token)
     setShowScanner(false)
-    try {
-      const url = new URL(text)
-      const token = url.searchParams.get('token')
-      if (token) {
-        navigate(`/table/menu?token=${encodeURIComponent(token)}`)
+    const raw = String(text || '').trim()
+    if (raw) {
+      try {
+        const url = new URL(raw)
+        const token = url.searchParams.get('token')
+        if (token) {
+          navigate(`/table/menu?token=${encodeURIComponent(token)}`)
+          return
+        }
+      } catch { /* not a full URL */ }
+      // If it's not a URL but a bare table token, use it directly
+      if (!raw.includes('://') && /^[A-Za-z0-9-]+$/.test(raw)) {
+        navigate(`/table/menu?token=${encodeURIComponent(raw)}`)
         return
       }
-    } catch { }
+    }
     setError("We couldn't read that QR code. Please try again or use the Demo Table.")
   }
 
@@ -52,6 +60,7 @@ export default function DemoEntryPage({ navigate }) {
         <DemoQRScanner
           onScanSuccess={handleScanSuccess}
           onClose={() => setShowScanner(false)}
+          onUseDemoTable={() => { setShowScanner(false); handleTryDemoTable() }}
         />
       )}
 
