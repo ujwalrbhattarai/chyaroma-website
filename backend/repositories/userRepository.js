@@ -78,3 +78,20 @@ export async function findByRoleAndBranch({ role, branchId, includeInactive = tr
 export async function deactivateUser(id) {
   return mapUser((await pool.query('UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE id = $1 RETURNING *', [id])).rows[0])
 }
+
+// Reuse an existing (deactivated) user row for the same email instead of hitting the unique
+// email constraint: sets the new details and brings the account back as active.
+export async function reactivateUser(id, { name, email, passwordHash, role, branchId, canLogin }) {
+  return mapUser((await pool.query(
+    `UPDATE users SET name=$2, email=$3, password_hash=$4, role=$5, branch_id=$6, can_login=$7,
+       is_active=TRUE, session_version=0, updated_at=NOW()
+     WHERE id=$1 RETURNING *`,
+    [id, name, email, passwordHash ?? null, role, branchId, canLogin],
+  )).rows[0])
+}
+
+// Permanently remove a staff member. Safe: every FK referencing users(id) is ON DELETE SET NULL.
+export async function deleteUser(id) {
+  const res = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id])
+  return res.rows[0] ?? null
+}

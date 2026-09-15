@@ -41,9 +41,13 @@ export function createStaffService({ repository = userRepository } = {}) {
       const role = payload.role?.trim() || ''
       const branchId = user.role === 'super_admin' ? payload.branchId : user.branchId
 
-      // Friendly duplicate-email error instead of an opaque 500 from the DB unique constraint.
+      // Friendly duplicate-email handling: an ACTIVE account blocks re-adding; a DEACTIVATED
+      // account with the same email is reactivated (reused) so staff can be added again, even
+      // with the exact same email.
       const existing = await repository.findByEmail?.(email)
-      if (existing) throw staffError('An account with this email already exists.', 409)
+      if (existing && existing.isActive) {
+        throw staffError('An account with this email already exists and is active. Deactivate it first, or use a different email.', 409)
+      }
 
       // Branch-scope validation
       if (user.role === 'super_admin' && !branchId) throw staffError('branchId is required')
@@ -60,34 +64,16 @@ export function createStaffService({ repository = userRepository } = {}) {
       if (demoBranchId && branchId === demoBranchId) throw staffError('Staff cannot be assigned to the Demo Branch.', 403)
 
       const needsLogin = LOGIN_ROLES.has(role)
+      const password = needsLogin ? payload.password : undefined
+      if (needsLogin && !password) throw staffError('Name, email, and password are required')
+      const passwordHash = needsLogin ? await argon2.hash(password) : null
+      const fields = { name, email, role, branchId, canLogin: needsLogin, passwordHash }
 
-      if (needsLogin) {
-        // ── LOGIN ACCOUNT PATH ──────────────────────────────────────────────
-        // branch_manager and kitchen_staff require app access; a real password
-        // must be supplied and is hashed before storage.
-        const password = payload.password
-        if (!password) throw staffError('Name, email, and password are required')
-        return repository.create({
-          name,
-          email,
-          passwordHash: await argon2.hash(password),
-          role,
-          branchId,
-          canLogin: true,
-        })
-      } else {
-        // ── STAFF-ONLY RECORD PATH ──────────────────────────────────────────
-        // Waiter, Cleaner, Host, Cashier, Barista, any custom role.
-        // No password is accepted or stored.  The record cannot log in.
-        return repository.create({
-          name,
-          email,
-          passwordHash: null,
-          role,
-          branchId,
-          canLogin: false,
-        })
+      if (existing) {
+        // Reuse the deactivated account with this email and bring it back as active.
+        return repository.reactivateUser(existing.id, fields)
       }
+      return repository.create(fields)
     },
 
     async deactivateStaff(user, staffId) {
@@ -97,6 +83,17 @@ export function createStaffService({ repository = userRepository } = {}) {
       if (user.role === 'branch_manager' && (target.branchId !== user.branchId)) throw staffError('Forbidden', 403)
       return repository.deactivateUser(staffId)
     },
+
+    async deleteStaff(user, staffId) {
+      assertStaffManagementAccess(user)
+      const target = await repository.findById(staffId)
+      if (!target || target.role === 'super_admin') throw staffError('Staff member not found', 404)
+      if (user.role === 'branch_manager' && (target.branchId !== user.branchId)) throw staffError('Forbidden', 403)
+      // Safety: only allow permanent deletion of staff that are already deactivated.
+      if (target.isActive) throw staffError('Deactivate the staff member before deleting them.', 409)
+      await repository.deleteUser(staffId)
+      return { deleted: true, id: staffId }
+    },
   }
 }
 
@@ -104,3 +101,4 @@ const service = createStaffService()
 export const listStaff = (...args) => service.listStaff(...args)
 export const createStaff = (...args) => service.createStaff(...args)
 export const deactivateStaff = (...args) => service.deactivateStaff(...args)
+export const deleteStaff = (...args) => service.deleteStaff(...args)

@@ -11,3 +11,4 @@ export const listStaff = () => request('')
 export const createStaff = (payload) =>
   request('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
 export const deactivateStaff = (staffId) => request(`/${staffId}/deactivate`, { method: 'PATCH' })
+export const deleteStaff = (staffId) => request(`/${staffId}`, { method: 'DELETE' })

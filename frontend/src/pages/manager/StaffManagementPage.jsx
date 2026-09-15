@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import PageShell from '../../components/shared/PageShell'
 import StaffListItem from '../../components/staff/StaffListItem'
-import { listStaff, createStaff, deactivateStaff } from '../../services/staffService'
+import { listStaff, createStaff, deactivateStaff, deleteStaff } from '../../services/staffService'
 import { listBranches } from '../../services/branchService'
 
 const ROLE_OPTIONS = [
@@ -34,6 +34,7 @@ export default function StaffManagementPage({ navigate, session }) {
   const [error, setError]       = useState('')
   const [success, setSuccess]   = useState('')
   const [loading, setLoading]   = useState(true)
+  const [deletingId, setDeletingId] = useState(null)
 
   const isSuperAdmin  = session?.role === 'super_admin'
   const defaultRole   = isSuperAdmin ? 'branch_manager' : 'kitchen_staff'
@@ -104,6 +105,22 @@ export default function StaffManagementPage({ navigate, session }) {
     }
   }
 
+  async function handleDelete(staffId) {
+    if (!window.confirm('Permanently delete this staff member? This cannot be undone. Their order history is kept.')) return
+    setDeletingId(staffId)
+    setError('')
+    setSuccess('')
+    try {
+      await deleteStaff(staffId)
+      setStaff((current) => current.filter((s) => s.id !== staffId))
+      setSuccess('Staff member permanently removed.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const roleOptions  = isSuperAdmin ? ROLE_OPTIONS : ROLE_OPTIONS.filter((o) => o.value !== 'branch_manager')
   const activeStaff  = staff.filter((s) => s.isActive)
   const inactiveStaff = staff.filter((s) => !s.isActive)
@@ -125,14 +142,14 @@ export default function StaffManagementPage({ navigate, session }) {
                 ? <p className="neo-card p-6 text-center text-sm text-[#9CA3AF] rounded-2xl">No active staff registered yet.</p>
                 : <div className="grid gap-3">
                   {activeStaff.map((s) => (
-                    <StaffListItem key={s.id} staff={s} onDeactivate={handleDeactivate} currentUserId={session?.id} branchName={branchMap[s.branchId] ?? null} isSuperAdmin={isSuperAdmin} />
+                    <StaffListItem key={s.id} staff={s} onDeactivate={handleDeactivate} onDelete={handleDelete} deletingId={deletingId} currentUserId={session?.id} branchName={branchMap[s.branchId] ?? null} isSuperAdmin={isSuperAdmin} />
                   ))}
                 </div>}
               {inactiveStaff.length > 0 && (
                 <details className="mt-6 neo-card rounded-xl p-4">
                   <summary className="cursor-pointer text-sm font-semibold text-[#9CA3AF] hover:text-[#F5A623]">Show {inactiveStaff.length} inactive staff members</summary>
                   <div className="mt-3 grid gap-3">
-                    {inactiveStaff.map((s) => <StaffListItem key={s.id} staff={s} onDeactivate={handleDeactivate} currentUserId={session?.id} branchName={branchMap[s.branchId] ?? null} isSuperAdmin={isSuperAdmin} />)}
+                    {inactiveStaff.map((s) => <StaffListItem key={s.id} staff={s} onDeactivate={handleDeactivate} onDelete={handleDelete} deletingId={deletingId} currentUserId={session?.id} branchName={branchMap[s.branchId] ?? null} isSuperAdmin={isSuperAdmin} />)}
                   </div>
                 </details>
               )}

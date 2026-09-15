@@ -23,6 +23,16 @@ const makeService = (users = [sampleManager, sampleKitchen, otherBranchKitchen])
         store.push(user)
         return user
       },
+      reactivateUser: async (id, fields) => {
+        const user = store.find((u) => u.id === id)
+        Object.assign(user, fields, { isActive: true, sessionVersion: 0 })
+        return user
+      },
+      deleteUser: async (id) => {
+        const idx = store.findIndex((u) => u.id === id)
+        if (idx !== -1) store.splice(idx, 1)
+        return { id }
+      },
       deactivateUser: async (id) => {
         const user = store.find((u) => u.id === id)
         user.isActive = false
@@ -107,13 +117,41 @@ test('waiter creation fails without a password', async () => {
 })
 
 test('createStaff rejects a duplicate email with a friendly 409', async () => {
-  const service = makeService() // already contains alice@cafe.test
+  const service = makeService() // already contains alice@cafe.test (active)
   await assert.rejects(
     () => service.createStaff(adminUser, {
       name: 'Another Alice', email: 'alice@cafe.test', role: 'waiter', branchId: 'branch-1', password: 'Password123',
     }),
     /already exists/,
   )
+})
+
+test('re-adding a deactivated staff email reactivates that account instead of blocking', async () => {
+  const deactivated = { id: 'old-1', name: 'Old', email: 'old@cafe.test', role: 'waiter', branchId: 'branch-1', isActive: false, canLogin: false }
+  const service = makeService([deactivated])
+  const result = await service.createStaff(adminUser, {
+    name: 'New Person', email: 'old@cafe.test', role: 'cashier', branchId: 'branch-1', password: 'Password123',
+  })
+  assert.equal(result.isActive, true, 'deactivated account should be reactivated')
+  assert.equal(result.role, 'cashier')
+  assert.equal(result.canLogin, true)
+  assert.ok(result.passwordHash)
+  // It should NOT have created a second row
+  const staff = await service.listStaff(adminUser)
+  assert.equal(staff.filter((s) => s.email === 'old@cafe.test').length, 1)
+})
+
+test('deleteStaff requires the staff to be deactivated first', async () => {
+  const service = makeService() // includes active sampleManager (manager-2)
+  await assert.rejects(() => service.deleteStaff(adminUser, 'manager-2'), /Deactivate the staff member/)
+})
+
+test('deleteStaff permanently removes a deactivated staff member', async () => {
+  const deactivated = { id: 'gone-1', name: 'Gone', email: 'gone@cafe.test', role: 'waiter', branchId: 'branch-1', isActive: false }
+  const service = makeService([deactivated])
+  const res = await service.deleteStaff(adminUser, 'gone-1')
+  assert.equal(res.deleted, true)
+  await assert.rejects(() => service.deleteStaff(adminUser, 'gone-1'), /Staff member not found/)
 })
 
 test('Manager creates a cleaner — staff-only record', async () => {

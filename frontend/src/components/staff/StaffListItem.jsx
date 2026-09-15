@@ -14,7 +14,7 @@ function displayRole(role) {
   return ROLE_LABELS[role] ?? (role ? role.charAt(0).toUpperCase() + role.slice(1) : role)
 }
 
-export default function StaffListItem({ staff, onDeactivate, currentUserId, branchName, isSuperAdmin }) {
+export default function StaffListItem({ staff, onDeactivate, onDelete, deletingId, currentUserId, branchName, isSuperAdmin }) {
   const isCurrentUser = staff.id === currentUserId
   const hasAppAccess  = staff.canLogin === true || LOGIN_ROLES.has(staff.role)
   const isManager     = staff.role === 'branch_manager'
@@ -83,6 +83,17 @@ export default function StaffListItem({ staff, onDeactivate, currentUserId, bran
             onClick={() => onDeactivate(staff.id)}
           >
             Deactivate
+          </button>
+        )}
+
+        {!staff.isActive && (
+          <button
+            id={`delete-staff-${staff.id}`}
+            className="px-3.5 py-1.5 text-xs rounded-xl font-bold cursor-pointer bg-red-600/20 border border-red-600/50 text-red-300 hover:bg-red-600/40"
+            onClick={() => onDelete?.(staff.id)}
+            disabled={deletingId === staff.id}
+          >
+            {deletingId === staff.id ? 'Deleting…' : 'Delete'}
           </button>
         )}
       </div>
