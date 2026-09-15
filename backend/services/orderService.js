@@ -87,6 +87,46 @@ export function createOrderService({ orders = orderRepository, orderItems = orde
       if (new Date() > lockDeadline || order.cancellationLockedAt) throw orderError('Cancellation window closed', 400)
       return orders.updateOrderStatus(orderId, branchId, 'cancelled', { cancelledAt: new Date().toISOString() })
     },
+    // ── Waiter / staff ordering ─────────────────────────────────────────────
+    async listStaffMenu(branchId) {
+      if (!branchId) throw orderError('branchId is required', 400)
+      return { menu: await menus.listMenuItems(branchId), categories: await menus.listCategories(branchId) }
+    },
+    async placeStaffOrder({ branchId, tableId, items, notes }) {
+      if (!branchId || !tableId) throw orderError('branchId and tableId are required', 400)
+      const table = await tables.findTableById(tableId, branchId)
+      if (!table || !table.isActive) throw orderError('Table not found', 404)
+      const tableItems = normalizeOrderItems(items)
+      const resolved = []
+      for (const entry of tableItems) {
+        const menuItem = await menus.findMenuItemById(entry.itemId, branchId)
+        if (!menuItem || !menuItem.isAvailable) throw orderError('Menu item unavailable', 400)
+        resolved.push({ entry, menuItem })
+      }
+      const order = await orders.createOrder({ branchId, tableId: table.id, notes, deviceId: null })
+      const createdItems = []
+      for (const { entry, menuItem } of resolved) {
+        createdItems.push(await orderItems.createOrderItem({ orderId: order.id, branchId, itemId: menuItem.id, name: menuItem.name, unitPrice: menuItem.price, quantity: entry.quantity, notes: entry.notes }))
+      }
+      // A waiter took an order on this table, so treat it as occupied.
+      if (tables.setCustomerOccupied) await tables.setCustomerOccupied(table.id, branchId, true)
+      // Notify the kitchen in real time that a new order was placed.
+      events.emit('order-updated', { branchId, order })
+      return { order, items: createdItems, canCancelUntil: new Date(Date.now() + 2 * 60 * 1000).toISOString() }
+    },
+    async listStaffReadyOrders(branchId) {
+      if (!branchId) throw orderError('branchId is required', 400)
+      const ready = await orders.listReadyOrdersByBranch(branchId)
+      const tableList = await tables.listTables(branchId)
+      const tableMap = new Map(tableList.map((t) => [t.id, t]))
+      const result = []
+      for (const order of ready) {
+        const items = await orderItems.listOrderItems(order.id, branchId)
+        const t = tableMap.get(order.tableId)
+        result.push({ ...order, tableNumber: t?.tableNumber ?? null, tableLabel: t?.label ?? null, items })
+      }
+      return result
+    },
   }
 }
 
@@ -95,3 +135,6 @@ export const getPublicMenu = (...args) => service.getPublicMenu(...args)
 export const placeOrder = (...args) => service.placeOrder(...args)
 export const getTableStatus = (...args) => service.getTableStatus(...args)
 export const cancelOrder = (...args) => service.cancelOrder(...args)
+export const listStaffMenu = (...args) => service.listStaffMenu(...args)
+export const placeStaffOrder = (...args) => service.placeStaffOrder(...args)
+export const listStaffReadyOrders = (...args) => service.listStaffReadyOrders(...args)

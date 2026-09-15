@@ -223,6 +223,43 @@ test('createPurchase succeeds without supplierId and increases stock', async () 
   assert.equal(createdPurchase.unitCost, 0)
 })
 
+test('replaceRecipe sets a menu item formula and clears it when empty', async () => {
+  const replacedCalls = []
+  const inventoryService = createInventoryService({
+    recipes: {
+      // The real repo wraps a transaction; the service only delegates + validates.
+      replaceRecipesForItem: async (branchId, itemId, lines) => {
+        replacedCalls.push({ branchId, itemId, lines })
+        return lines
+      },
+    },
+  })
+
+  // Normal save: multiple ingredient lines
+  const saved = await inventoryService.replaceRecipe(BRANCH_A, 'item-1', [
+    { ingredientId: 'ing-milk', quantityUsed: 0.25 },
+    { ingredientId: 'ing-sugar', quantityUsed: 2 },
+  ])
+  assert.equal(replacedCalls.length, 1)
+  assert.equal(replacedCalls[0].itemId, 'item-1')
+  assert.deepEqual(replacedCalls[0].lines, [
+    { ingredientId: 'ing-milk', quantityUsed: 0.25 },
+    { ingredientId: 'ing-sugar', quantityUsed: 2 },
+  ])
+  assert.equal(saved.length, 2)
+
+  // Empty array clears the formula
+  await inventoryService.replaceRecipe(BRANCH_A, 'item-1', [])
+  assert.deepEqual(replacedCalls[1].lines, [])
+
+  // Invalid quantity is rejected
+  await assert.rejects(
+    () => inventoryService.replaceRecipe(BRANCH_A, 'item-1', [{ ingredientId: 'ing-milk', quantityUsed: -1 }]),
+    /quantityUsed must be a positive number/,
+  )
+  assert.equal(replacedCalls.length, 2)
+})
+
 // ── Test 5: Idempotent & Transactional Inventory Deduction ─────────────────
 
 test('deductInventoryForOrder deducts recipe quantities inside transaction', async () => {

@@ -5,10 +5,10 @@ import { getDemoBranchId } from '../repositories/demoRepository.js'
 const staffError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 
 // Roles that require a real application login account with hashed credentials.
-// super_admin, branch_manager, kitchen_staff, cashier.
-// Every other role (waiter, barista, host, cleaner, custom, …) is a
+// super_admin, branch_manager, kitchen_staff, cashier, waiter.
+// Every other role (barista, host, cleaner, custom, …) is a
 // staff-only record: no password, no authentication credentials, cannot log in.
-const LOGIN_ROLES = new Set(['super_admin', 'branch_manager', 'kitchen_staff', 'cashier'])
+const LOGIN_ROLES = new Set(['super_admin', 'branch_manager', 'kitchen_staff', 'cashier', 'waiter'])
 
 // Roles that ordinary branch managers cannot create.
 const PROTECTED_ROLES = new Set(['super_admin', 'branch_manager'])

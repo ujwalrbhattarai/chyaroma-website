@@ -18,7 +18,7 @@ export function assertTableReleaseAccess(user) {
 }
 
 export function assertTableReadAccess(user) {
-  if (!user || !['super_admin', 'branch_manager', 'kitchen_staff', 'cashier'].includes(user.role)) throw tableError('Forbidden', 403)
+  if (!user || !['super_admin', 'branch_manager', 'kitchen_staff', 'cashier', 'waiter'].includes(user.role)) throw tableError('Forbidden', 403)
 }
 
 function resolveBranchId(user, requestedBranchId) {

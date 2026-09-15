@@ -29,6 +29,9 @@ const mainNavByArea = {
   cashier: [
     ['Dashboard / Billing', '/cashier'],
   ],
+  waiter: [
+    ['Waiter Home', '/waiter'],
+  ],
 }
 
 // Demo section items — shown only in the admin area, below a divider
@@ -73,7 +76,7 @@ export default function Sidebar({ area, navigate, setSession }) {
       <div>
         <button
           className="mb-6 flex items-center gap-3 text-left group cursor-pointer transition-transform hover:scale-105"
-          onClick={() => navigate(area === 'kitchen' ? '/kitchen' : area === 'cashier' ? '/cashier' : '/')}
+          onClick={() => navigate(area === 'kitchen' ? '/kitchen' : area === 'cashier' ? '/cashier' : area === 'waiter' ? '/waiter' : '/')}
         >
           <img src={displayLogo} alt="Chyaroma Logo" className="h-10 w-10 object-contain rounded-lg drop-shadow-[0_2px_8px_rgba(212,175,55,0.4)]" />
           <span className="text-[#D4AF37] text-2xl font-bold tracking-wide font-serif truncate">Chyaroma</span>
@@ -88,6 +91,12 @@ export default function Sidebar({ area, navigate, setSession }) {
         {area === 'cashier' && (
           <div className="mb-4 px-2 text-[11px] font-black uppercase tracking-widest text-[#D4AF37] border-b border-[#1F2937]/60 pb-2">
             CASHIER OPERATIONS
+          </div>
+        )}
+
+        {area === 'waiter' && (
+          <div className="mb-4 px-2 text-[11px] font-black uppercase tracking-widest text-[#D4AF37] border-b border-[#1F2937]/60 pb-2">
+            WAITER OPERATIONS
           </div>
         )}
 

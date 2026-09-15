@@ -1,5 +1,6 @@
 import * as tableRepository from '../repositories/tableRepository.js'
-import { cancelOrder, getPublicMenu, getTableStatus, placeOrder } from '../services/orderService.js'
+import { cancelOrder, getPublicMenu, getTableStatus, listStaffMenu, listStaffReadyOrders, placeOrder, placeStaffOrder } from '../services/orderService.js'
+import { transitionOrder } from '../services/kitchenService.js'
 import { enforceDeviceTabLock } from '../services/transferService.js'
 
 async function findTableOrThrow(token) {
@@ -67,4 +68,40 @@ export async function cancelOrderHandler(request, response, next) {
   } catch (error) {
     next(error)
   }
+}
+
+// ── Waiter / staff ordering ───────────────────────────────────────────────
+
+function staffBranchId(request) {
+  // Super admins are branch-less, so they must pass branchId; everyone else uses their own.
+  return request.user.role === 'super_admin'
+    ? (request.query.branchId || request.body.branchId || request.user.branchId)
+    : request.user.branchId
+}
+
+export async function getStaffMenuHandler(request, response, next) {
+  try { response.status(200).json(await listStaffMenu(staffBranchId(request))) } catch (error) { next(error) }
+}
+
+export async function placeStaffOrderHandler(request, response, next) {
+  try {
+    response.status(201).json(await placeStaffOrder({
+      branchId: staffBranchId(request),
+      tableId: request.body.tableId,
+      items: request.body.items,
+      notes: request.body.notes,
+    }))
+  } catch (error) { next(error) }
+}
+
+export async function getStaffReadyOrdersHandler(request, response, next) {
+  try { response.status(200).json({ orders: await listStaffReadyOrders(staffBranchId(request)) }) } catch (error) { next(error) }
+}
+
+export async function serveStaffOrderHandler(request, response, next) {
+  try {
+    const branchId = staffBranchId(request)
+    // Marking served = order completed (deducts inventory + notifies in real time).
+    response.status(200).json({ order: await transitionOrder(branchId, request.params.orderId, 'completed', request.user.role) })
+  } catch (error) { next(error) }
 }

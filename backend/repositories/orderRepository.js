@@ -33,6 +33,10 @@ export async function listOpenOrdersByBranch(branchId) {
   // Exclude demo orders from the real kitchen queue
   return (await pool.query("SELECT * FROM orders WHERE branch_id = $1 AND status IN ('pending', 'accepted', 'preparing', 'ready') AND is_demo = FALSE ORDER BY created_at ASC", [branchId])).rows.map(mapOrder)
 }
+export async function listReadyOrdersByBranch(branchId) {
+  // Orders the kitchen has finished (ready), excluding demo — used by the waiter's "serve" screen.
+  return (await pool.query("SELECT * FROM orders WHERE branch_id = $1 AND status = 'ready' AND is_demo = FALSE ORDER BY ready_at ASC, created_at ASC", [branchId])).rows.map(mapOrder)
+}
 export async function updateOrderStatus(id, branchId, status, fields = {}) {
   return mapOrder((await pool.query(
     `UPDATE orders

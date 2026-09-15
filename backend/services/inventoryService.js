@@ -10,6 +10,20 @@ export function createInventoryService({ inventory = inventoryRepository, recipe
     async createIngredient(branchId, payload) { return inventory.createIngredient(branchId, payload) },
     async createRecipe(branchId, payload) { return recipes.createRecipe({ branchId, itemId: payload.itemId, ingredientId: payload.ingredientId, quantityUsed: payload.quantityUsed }) },
     async listRecipes(branchId) { return recipes.listRecipes(branchId) },
+    // Set/overwrite a menu item's full formula (ingredients + quantities in one save).
+    // Accepts an array of { ingredientId, quantityUsed }; an empty array clears the formula.
+    async replaceRecipe(branchId, itemId, lines) {
+      if (!itemId) throw inventoryError('itemId is required', 400)
+      if (!Array.isArray(lines)) throw inventoryError('lines must be an array', 400)
+      const normalized = lines.map((l) => {
+        const ingredientId = l?.ingredientId
+        const quantityUsed = Number(l?.quantityUsed)
+        if (!ingredientId) throw inventoryError('Each formula line needs an ingredient', 400)
+        if (!Number.isFinite(quantityUsed) || quantityUsed <= 0) throw inventoryError('quantityUsed must be a positive number', 400)
+        return { ingredientId, quantityUsed }
+      })
+      return recipes.replaceRecipesForItem(branchId, itemId, normalized)
+    },
     async listLowStock(branchId) { return inventory.listLowStockIngredients(branchId) },
     async createSupplier(branchId, payload) { return suppliers.createSupplier(branchId, payload) },
     async listSuppliers(branchId) { return suppliers.listSuppliers(branchId) },
@@ -41,6 +55,7 @@ const service = createInventoryService()
 export const listIngredients = (...args) => service.listIngredients(...args)
 export const createIngredient = (...args) => service.createIngredient(...args)
 export const createRecipe = (...args) => service.createRecipe(...args)
+export const replaceRecipe = (...args) => service.replaceRecipe(...args)
 export const listRecipes = (...args) => service.listRecipes(...args)
 export const listLowStock = (...args) => service.listLowStock(...args)
 export const createSupplier = (...args) => service.createSupplier(...args)

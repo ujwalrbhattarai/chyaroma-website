@@ -9,15 +9,15 @@ const ROLE_OPTIONS = [
   { value: 'branch_manager', label: 'Branch Manager', requiresLogin: true },
   { value: 'kitchen_staff',  label: 'Kitchen Staff',  requiresLogin: true },
   { value: 'cashier',        label: 'Cashier',        requiresLogin: true },
+  { value: 'waiter',         label: 'Waiter',         requiresLogin: true },
   // ── Staff-only roles (no application login) ────────────────────────────
-  { value: 'waiter',   label: 'Waiter',   requiresLogin: false },
   { value: 'barista',  label: 'Barista',  requiresLogin: false },
   { value: 'host',     label: 'Host',     requiresLogin: false },
   { value: 'cleaner',  label: 'Cleaner',  requiresLogin: false },
 ]
 
 // Roles whose records are also application login accounts
-const LOGIN_ROLES = new Set(['super_admin', 'branch_manager', 'kitchen_staff', 'cashier'])
+const LOGIN_ROLES = new Set(['super_admin', 'branch_manager', 'kitchen_staff', 'cashier', 'waiter'])
 
 function roleNeedsLogin(roleValue, isCustom) {
   if (isCustom) return false

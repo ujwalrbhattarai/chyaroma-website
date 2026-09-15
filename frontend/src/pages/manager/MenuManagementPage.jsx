@@ -5,6 +5,7 @@ import {
   getMenu, createCategory, updateCategory, deactivateCategory,
   createMenuItem, updateMenuItem, toggleAvailability, imageUrl,
 } from '../../services/menuService'
+import { getIngredients, getRecipes, replaceRecipe } from '../../services/inventoryService'
 
 const emptyCategoryForm = { name: '', sortOrder: '0' }
 const emptyItemForm = { name: '', price: '', description: '', prepTimeMinutes: '0', categoryId: '', isAvailable: true }
@@ -27,13 +28,22 @@ export default function MenuManagementPage({ navigate, session }) {
   const [imagePreview, setImagePreview] = useState('')
   const imageInputRef = useRef(null)
 
+  // Formula (recipe) state — the ingredients used to make a menu item.
+  const [ingredients, setIngredients] = useState([])
+  const [recipesByItem, setRecipesByItem] = useState({}) // itemId -> recipe lines
+  const [formula, setFormula] = useState([]) // { ingredientId, quantityUsed }
+
   const branchId = session?.role === 'super_admin' ? undefined : undefined // manager uses own branchId server-side
 
   async function reload() {
     try {
-      const data = await getMenu()
+      const [data, inv, rec] = await Promise.all([getMenu(), getIngredients(), getRecipes()])
       setCategories(data.categories ?? [])
       setItems(data.items ?? [])
+      setIngredients(inv.ingredients ?? [])
+      const map = {}
+      for (const r of rec.recipes ?? []) { (map[r.itemId] ||= []).push(r) }
+      setRecipesByItem(map)
     } catch (err) {
       setError(err.message)
     }
@@ -83,6 +93,7 @@ export default function MenuManagementPage({ navigate, session }) {
     setItemForm({ ...emptyItemForm, categoryId: cat.id })
     setImageFile(null)
     setImagePreview('')
+    setFormula([newFormulaRow()])
     setPanelMode('item')
   }
 
@@ -94,6 +105,12 @@ export default function MenuManagementPage({ navigate, session }) {
     })
     setImageFile(null)
     setImagePreview('')
+    const current = recipesByItem[item.id] || []
+    setFormula(
+      current.length
+        ? current.map((r) => ({ ingredientId: r.ingredientId, quantityUsed: String(r.quantityUsed) }))
+        : [newFormulaRow()],
+    )
     setPanelMode('item')
   }
 
@@ -118,17 +135,37 @@ export default function MenuManagementPage({ navigate, session }) {
       isAvailable: itemForm.isAvailable,
     }
     try {
+      let savedItemId = editingItem ? editingItem.id : null
       if (editingItem) {
         await updateMenuItem(editingItem.id, payload, imageFile)
       } else {
-        await createMenuItem(payload, imageFile)
+        const created = await createMenuItem(payload, imageFile)
+        savedItemId = created?.item?.id ?? created?.id
       }
+
+      // Save the formula (ingredient lines) for this item — empty array clears it.
+      const lines = formula
+        .filter((f) => f.ingredientId && f.quantityUsed !== '' && f.quantityUsed !== null)
+        .map((f) => ({ ingredientId: f.ingredientId, quantityUsed: Number(f.quantityUsed) }))
+      if (savedItemId) {
+        try {
+          await replaceRecipe(savedItemId, lines)
+        } catch (recipeErr) {
+          setError(`Item saved, but the formula could not be saved: ${recipeErr.message}`)
+        }
+      }
+
       setImageFile(null)
       setImagePreview('')
       await reload()
       setPanelMode(null)
     } catch (err) { setError(err.message) }
   }
+
+  function newFormulaRow() { return { ingredientId: '', quantityUsed: '' } }
+  function updateFormula(index, key, value) { setFormula((f) => f.map((row, i) => (i === index ? { ...row, [key]: value } : row))) }
+  function addFormulaRow() { setFormula((f) => [...f, newFormulaRow()]) }
+  function removeFormulaRow(index) { setFormula((f) => f.filter((_, i) => i !== index)) }
 
   async function handleToggle(itemId, isAvailable) {
     setToggling(itemId)
@@ -143,6 +180,8 @@ export default function MenuManagementPage({ navigate, session }) {
   for (const item of items) {
     if (itemsByCategory.has(item.categoryId)) itemsByCategory.get(item.categoryId).push(item)
   }
+  const formulaCount = {}
+  for (const item of items) formulaCount[item.id] = (recipesByItem[item.id] || []).length
 
   return (
     <PageShell area="manager" title="Menu management" description="Manage categories, items, prices, and availability for your branch menu." navigate={navigate}>
@@ -172,6 +211,7 @@ export default function MenuManagementPage({ navigate, session }) {
                   onEditItem={openEditItem}
                   onToggleAvailability={handleToggle}
                   toggling={toggling}
+                  formulaCount={formulaCount}
                 />
               ))}
         </div>
@@ -257,6 +297,70 @@ export default function MenuManagementPage({ navigate, session }) {
                     <input id="item-available" type="checkbox" className="h-4 w-4 rounded" checked={itemForm.isAvailable} onChange={(e) => setItemForm((f) => ({ ...f, isAvailable: e.target.checked }))} />
                     Available immediately
                   </label>
+
+                  {/* Formula (ingredients) editor */}
+                  <fieldset className="rounded-xl border border-[#1F2937] bg-[#101524] p-3">
+                    <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Formula (ingredients)</legend>
+                    <p className="mb-3 text-xs text-[#8B93A7]">
+                      Ingredients used to make this item. Inventory is deducted automatically when an order for it is completed.
+                    </p>
+                    {formula.length === 0 && (
+                      <p className="mb-2 text-xs text-[#8B93A7]">No ingredients yet — add the ingredients this item needs.</p>
+                    )}
+                    <div className="grid gap-2">
+                      {formula.map((row, i) => {
+                        const rowIng = ingredients.find((ing) => ing.id === row.ingredientId)
+                        return (
+                          <div key={i} className="grid gap-2 sm:grid-cols-[1fr_auto_auto] items-center">
+                            <select
+                              className="rounded-lg border border-[#374151] bg-[#0B0F1A] px-2 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#F5A623]"
+                              value={row.ingredientId}
+                              onChange={(e) => updateFormula(i, 'ingredientId', e.target.value)}
+                            >
+                              <option value="">Select ingredient…</option>
+                              {ingredients.map((ing) => (
+                                <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>
+                              ))}
+                            </select>
+                            <label className="flex items-center gap-1 text-xs text-[#8B93A7]">
+                              Qty
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                className="w-20 rounded-lg border border-[#374151] bg-[#0B0F1A] px-2 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#F5A623]"
+                                placeholder="0.25"
+                                value={row.quantityUsed}
+                                onChange={(e) => updateFormula(i, 'quantityUsed', e.target.value)}
+                              />
+                              <span>{rowIng?.unit || ''}</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => removeFormulaRow(i)}
+                              className="rounded-lg border border-[#374151] px-2 py-2 text-sm text-[#9CA3AF] hover:bg-[#0B0F1A]"
+                              title="Remove ingredient"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {ingredients.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={addFormulaRow}
+                        className="mt-3 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                      >
+                        + Ingredient
+                      </button>
+                    ) : (
+                      <p className="mt-3 text-xs text-[#8B93A7]">
+                        No ingredients found. Add ingredients in the Inventory page first to build a formula.
+                      </p>
+                    )}
+                  </fieldset>
                   <div className="flex gap-2">
                     <button id="save-item" type="submit" className="flex-1 rounded-lg bg-[#0B0F1A] py-2 text-sm font-semibold text-white hover:bg-[#2A3348]">{editingItem ? 'Save' : 'Create'}</button>
                     <button type="button" className="rounded-lg border border-[#374151] px-4 py-2 text-sm" onClick={() => setPanelMode(null)}>Cancel</button>

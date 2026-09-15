@@ -1,6 +1,6 @@
 import MenuItemCard from './MenuItemCard'
 
-export default function MenuCategoryList({ category, items, onEditCategory, onDeactivateCategory, onAddItem, onEditItem, onToggleAvailability, toggling }) {
+export default function MenuCategoryList({ category, items, onEditCategory, onDeactivateCategory, onAddItem, onEditItem, onToggleAvailability, toggling, formulaCount = {} }) {
 	return (
 		<section id={`category-${category.id}`} className={`rounded-2xl border bg-[#151B2B] shadow-sm ${category.isActive ? 'border-[#1F2937]' : 'border-[#1E2435] opacity-60'}`}>
 			<div className="flex items-center justify-between gap-3 border-b border-[#1E2435] px-5 py-4">
@@ -46,6 +46,7 @@ export default function MenuCategoryList({ category, items, onEditCategory, onDe
 							onEdit={onEditItem}
 							onToggle={onToggleAvailability}
 							toggling={toggling}
+							formulaCount={formulaCount[item.id] ?? 0}
 						/>
 					))}
 				</div>}

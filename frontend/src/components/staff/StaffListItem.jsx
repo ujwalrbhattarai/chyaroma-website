@@ -1,4 +1,4 @@
-const LOGIN_ROLES = new Set(['super_admin', 'branch_manager', 'kitchen_staff', 'cashier'])
+const LOGIN_ROLES = new Set(['super_admin', 'branch_manager', 'kitchen_staff', 'cashier', 'waiter'])
 
 const ROLE_LABELS = {
   branch_manager: 'Branch Manager',

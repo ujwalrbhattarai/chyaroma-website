@@ -84,28 +84,25 @@ test('branch_manager creation fails without a password', async () => {
   )
 })
 
-// ── Creating staff-only records (no login) ─────────────────────────────────
+// ── Creating staff records ─────────────────────────────────────────────────
 
-test('Super Admin creates a waiter — no password, canLogin false', async () => {
+test('Super Admin creates a waiter login account (requires password, canLogin true)', async () => {
   const service = makeService([])
   const created = await service.createStaff(adminUser, {
-    name: 'Waiter', email: 'waiter@cafe.test', role: 'waiter', branchId: 'branch-1',
+    name: 'Waiter', email: 'waiter@cafe.test', role: 'waiter', branchId: 'branch-1', password: 'waiterPass123',
   })
   assert.equal(created.role, 'waiter')
   assert.equal(created.branchId, 'branch-1')
-  assert.equal(created.canLogin, false, 'waiter must not be login-enabled')
-  assert.equal(created.passwordHash, null, 'waiter must not have a passwordHash')
+  assert.equal(created.canLogin, true, 'waiter should be login-enabled')
+  assert.ok(created.passwordHash, 'waiter must have a passwordHash')
 })
 
-test('Manager creates a waiter for their branch — no password required', async () => {
+test('waiter creation fails without a password', async () => {
   const service = makeService([])
-  const created = await service.createStaff(managerUser, {
-    name: 'Waiter Guy', email: 'wg@cafe.test', role: 'waiter',
-  })
-  assert.equal(created.role, 'waiter')
-  assert.equal(created.branchId, 'branch-1')
-  assert.equal(created.canLogin, false)
-  assert.equal(created.passwordHash, null)
+  await assert.rejects(
+    () => service.createStaff(managerUser, { name: 'Waiter Guy', email: 'wg@cafe.test', role: 'waiter' }),
+    /password are required/,
+  )
 })
 
 test('Manager creates a cleaner — staff-only record', async () => {

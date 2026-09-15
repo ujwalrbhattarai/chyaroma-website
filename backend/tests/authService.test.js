@@ -98,3 +98,18 @@ test('Staff-only record with null passwordHash cannot authenticate', async () =>
     /Invalid email or password/,
   )
 })
+
+test('Waiter can log in with a valid password and gets a branch-scoped token', async () => {
+  const passwordHash = await argon2.hash('waiter-pass')
+  const service = makeService([{
+    id: 'waiter-login', name: 'Waiter', email: 'w@cafe.test',
+    passwordHash, role: 'waiter', branchId: 'branch-1',
+    isActive: true, sessionVersion: 0,
+    canLogin: true,   // ← waiter is a login-capable role
+  }])
+  const session = await service.authenticate({ email: 'w@cafe.test', password: 'waiter-pass' })
+  assert.equal(session.user.role, 'waiter')
+  assert.equal(session.user.branchId, 'branch-1')
+  assert.ok(session.accessToken)
+  assert.equal(jwt.decode(session.accessToken).role, 'waiter')
+})

@@ -16,3 +16,9 @@ export const getPublicMenu = (token) => request(`/public/menu?token=${encodeURIC
 export const placeOrder = (payload) => request('/public/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
 export const getOrderStatus = (token) => request(`/public/status?token=${encodeURIComponent(token)}`)
 export const cancelOrder = (payload) => request('/public/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+
+// Waiter / staff ordering
+export const getStaffMenu = () => request('/staff/menu')
+export const placeStaffOrder = (payload) => request('/staff/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+export const getStaffReadyOrders = () => request('/staff/ready')
+export const serveOrder = (orderId) => request(`/staff/orders/${encodeURIComponent(orderId)}/serve`, { method: 'POST' })

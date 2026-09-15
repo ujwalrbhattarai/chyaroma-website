@@ -4,7 +4,7 @@ import { login } from '../../services/authService'
 import { useBranding } from '../../context/BrandingContext'
 import logo from '../../logo.png'
 
-const destinationByRole = { super_admin: '/admin', branch_manager: '/manager', kitchen_staff: '/kitchen', cashier: '/cashier' }
+const destinationByRole = { super_admin: '/admin', branch_manager: '/manager', kitchen_staff: '/kitchen', cashier: '/cashier', waiter: '/waiter' }
 
 const FOODS = ['☕', '🍔', '🍕', '🥐', '🍰', '🍜', '🥗', '🍩', '🥤', '🍟', '🍣', '🧁']
 const DRINKS = ['🧋', '🍵', '☕', '🍷', '🍹', '🍧', '🍦', '🥞', '🥐', '🧇', '🥨', '🍪']

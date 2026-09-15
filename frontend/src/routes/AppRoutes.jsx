@@ -23,6 +23,7 @@ import DemoBillPage from '../pages/demo/DemoBillPage'
 import DemoStatisticsPage from '../pages/admin/DemoStatisticsPage'
 import SuperAdminManagementPage from '../pages/admin/SuperAdminManagementPage'
 import CashierDashboardPage from '../pages/cashier/CashierDashboardPage'
+import WaiterPage from '../pages/waiter/WaiterPage'
 
 const routes = {
   '/': { page: LandingPage },
@@ -48,6 +49,7 @@ const routes = {
   '/manager/billing': { page: BillingPage, roles: ['branch_manager'] },
   '/manager/settings': { page: SettingsPage, roles: ['branch_manager'] },
   '/cashier': { page: CashierDashboardPage, roles: ['cashier'] },
+  '/waiter': { page: WaiterPage, roles: ['waiter'] },
   '/kitchen': { page: KitchenQueuePage, roles: ['branch_manager', 'kitchen_staff'] },
   '/kitchen/queue': { page: KitchenQueuePage, roles: ['branch_manager', 'kitchen_staff'] },
   '/kitchen/tables': { page: KitchenTablesPage, roles: ['branch_manager', 'kitchen_staff'] },
@@ -73,6 +75,8 @@ export default function AppRoutes({ path, navigate, session, setSession, loading
         navigate('/cashier')
       } else if (session.role === 'kitchen_staff') {
         navigate('/kitchen')
+      } else if (session.role === 'waiter') {
+        navigate('/waiter')
       } else if (session.role === 'branch_manager') {
         navigate('/manager')
       } else if (session.role === 'super_admin') {

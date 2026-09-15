@@ -9,9 +9,13 @@ const sampleCategory = { id: 'cat-1', branchId: 'branch-1', name: 'Drinks' }
 const makeService = ({ tables = [sampleTable], menuItems = [sampleMenuItem], categories = [sampleCategory], orders = [] } = {}) => {
   const orderStore = [...orders]
   const itemStore = []
+  const occupiedCalls = []
   return createOrderService({
     tables: {
       findTableByToken: async (token) => tables.find((t) => t.qrToken === token) ?? null,
+      findTableById: async (id, branchId) => tables.find((t) => t.id === id && t.branchId === branchId) ?? null,
+      listTables: async (branchId) => tables.filter((t) => t.branchId === branchId),
+      setCustomerOccupied: async (id, branchId, occupied) => { occupiedCalls.push({ id, branchId, occupied }); return { id, branchId, customerOccupied: occupied } },
     },
     menus: {
       listMenuItems: async (branchId) => menuItems.filter((i) => i.branchId === branchId && i.isAvailable),
@@ -28,6 +32,7 @@ const makeService = ({ tables = [sampleTable], menuItems = [sampleMenuItem], cat
       listOrdersByTable: async (branchId, tableId) => orderStore.filter((o) => o.branchId === branchId && o.tableId === tableId),
       listActiveOrdersByTable: async (branchId, tableId) => orderStore.filter((o) => o.branchId === branchId && o.tableId === tableId && !['cancelled', 'completed'].includes(o.status)),
       listCustomerVisibleOrdersByTable: async (branchId, tableId) => orderStore.filter((o) => o.branchId === branchId && o.tableId === tableId && o.status !== 'cancelled' && o.customerVisible !== false),
+      listReadyOrdersByBranch: async (branchId) => orderStore.filter((o) => o.branchId === branchId && o.status === 'ready'),
       updateOrderStatus: async (id, branchId, status, fields = {}) => {
         const order = orderStore.find((o) => o.id === id && o.branchId === branchId)
         Object.assign(order, { status, ...fields })
@@ -124,4 +129,50 @@ test('placeOrder rejects a tampered payload before creating any order row', asyn
     async () => service.placeOrder({ branchId: 'branch-1', tableToken: 'tok-1', items: [{ itemId: 'item-1', quantity: -1 }] }),
     /quantity/i,
   )
+})
+
+// ── Waiter / staff ordering ────────────────────────────────────────────────
+
+test('listStaffMenu returns the menu and categories for a branch', async () => {
+  const service = makeService()
+  const result = await service.listStaffMenu('branch-1')
+  assert.equal(result.menu.length, 1)
+  assert.equal(result.categories.length, 1)
+  assert.equal(result.menu[0].name, 'Coffee')
+})
+
+test('placeStaffOrder creates a pending order for the selected table', async () => {
+  const service = makeService()
+  const result = await service.placeStaffOrder({
+    branchId: 'branch-1',
+    tableId: 'table-1',
+    items: [{ itemId: 'item-1', quantity: 2 }],
+    notes: 'bring first',
+  })
+  assert.ok(result.order?.id)
+  assert.equal(result.order.status, 'pending')
+  assert.equal(result.order.tableId, 'table-1')
+  assert.ok(result.canCancelUntil)
+  assert.equal(result.items.length, 1)
+})
+
+test('placeStaffOrder rejects an unknown table', async () => {
+  const service = makeService()
+  await assert.rejects(
+    () => service.placeStaffOrder({ branchId: 'branch-1', tableId: 'ghost-table', items: [{ itemId: 'item-1', quantity: 1 }] }),
+    /Table not found/,
+  )
+})
+
+test('listStaffReadyOrders returns orders the kitchen has finished with table numbers', async () => {
+  const service = makeService({
+    orders: [
+      { id: 'ord-ready', branchId: 'branch-1', tableId: 'table-1', status: 'ready', readyAt: new Date().toISOString(), createdAt: new Date().toISOString() },
+      { id: 'ord-pending', branchId: 'branch-1', tableId: 'table-1', status: 'pending', createdAt: new Date().toISOString() },
+    ],
+  })
+  const ready = await service.listStaffReadyOrders('branch-1')
+  assert.equal(ready.length, 1)
+  assert.equal(ready[0].id, 'ord-ready')
+  assert.equal(ready[0].tableNumber, 3)
 })

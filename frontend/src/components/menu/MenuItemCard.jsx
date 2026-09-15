@@ -1,7 +1,7 @@
 import AvailabilityToggle from './AvailabilityToggle'
 import { imageUrl } from '../../services/menuService'
 
-export default function MenuItemCard({ item, onEdit, onToggle, toggling }) {
+export default function MenuItemCard({ item, onEdit, onToggle, toggling, formulaCount = 0 }) {
 	return (
 		<article id={`menu-item-${item.id}`} className={`rounded-xl border p-4 transition-opacity ${item.isAvailable ? 'border-[#1F2937] bg-[#151B2B]' : 'border-[#1E2435] bg-[#0B0F1A] opacity-70'}`}>
 			{item.imageUrl && (
@@ -16,6 +16,11 @@ export default function MenuItemCard({ item, onEdit, onToggle, toggling }) {
 					<div className="mt-2 flex flex-wrap gap-3 text-sm">
 						<span className="font-medium text-[#F5A623]">Rs {Number(item.price).toFixed(2)}</span>
 						{item.prepTimeMinutes > 0 && <span className="text-[#9CA3AF]">⏱ {item.prepTimeMinutes} min</span>}
+						{formulaCount > 0 && (
+							<span className="rounded-full bg-teal-500/15 border border-teal-500/30 px-2 py-0.5 text-[11px] font-semibold text-teal-300">
+								🍶 Formula · {formulaCount}
+							</span>
+						)}
 					</div>
 				</div>
 				<div className="flex flex-col items-end gap-3">

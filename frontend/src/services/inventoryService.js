@@ -17,6 +17,8 @@ export const adjustIngredientStock = (ingredientId, stockQuantity, branchId) =>
   request(`/ingredients/${ingredientId}/stock${qs(branchId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stockQuantity }) })
 export const getRecipes = (branchId) => request(`/recipes${qs(branchId)}`)
 export const createRecipe = (payload, branchId) => request(`/recipes${qs(branchId)}`, json(payload))
+export const replaceRecipe = (itemId, lines, branchId) =>
+  request(`/recipes/${encodeURIComponent(itemId)}${qs(branchId)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines }) })
 export const getLowStock = (branchId) => request(`/low-stock${qs(branchId)}`)
 export const getSuppliers = (branchId) => request(`/suppliers${qs(branchId)}`)
 export const createSupplier = (payload, branchId) => request(`/suppliers${qs(branchId)}`, json(payload))
