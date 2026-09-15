@@ -17,6 +17,7 @@ const makeService = (users = [sampleManager, sampleKitchen, otherBranchKitchen])
       listManagedStaff: async ({ branchId } = {}) =>
         store.filter((u) => u.role !== 'super_admin' && (branchId === undefined || u.branchId === branchId)),
       findById: async (id) => store.find((u) => u.id === id) ?? null,
+      findByEmail: async (email) => store.find((u) => u.email === email) ?? null,
       create: async (payload) => {
         const user = { ...payload, id: `new-${Date.now()}`, isActive: true }
         store.push(user)
@@ -102,6 +103,16 @@ test('waiter creation fails without a password', async () => {
   await assert.rejects(
     () => service.createStaff(managerUser, { name: 'Waiter Guy', email: 'wg@cafe.test', role: 'waiter' }),
     /password are required/,
+  )
+})
+
+test('createStaff rejects a duplicate email with a friendly 409', async () => {
+  const service = makeService() // already contains alice@cafe.test
+  await assert.rejects(
+    () => service.createStaff(adminUser, {
+      name: 'Another Alice', email: 'alice@cafe.test', role: 'waiter', branchId: 'branch-1', password: 'Password123',
+    }),
+    /already exists/,
   )
 })
 

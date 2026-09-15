@@ -41,6 +41,10 @@ export function createStaffService({ repository = userRepository } = {}) {
       const role = payload.role?.trim() || ''
       const branchId = user.role === 'super_admin' ? payload.branchId : user.branchId
 
+      // Friendly duplicate-email error instead of an opaque 500 from the DB unique constraint.
+      const existing = await repository.findByEmail?.(email)
+      if (existing) throw staffError('An account with this email already exists.', 409)
+
       // Branch-scope validation
       if (user.role === 'super_admin' && !branchId) throw staffError('branchId is required')
       assertBranchScope(user, branchId)
